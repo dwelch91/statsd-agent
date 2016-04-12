@@ -1,81 +1,103 @@
-import statsd
-import time
-import psutil
+import argparse
 import multiprocessing
+import platform
+import time
 
-def disk():
-    c = statsd.StatsClient('localhost', 8125, prefix='system.disk')
+import psutil
+import statsd
+
+isLinux = platform.system() == 'Linux'
+
+
+def disk(host, port, prefix):
+    client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'disk']))
     while True:
         disk_usage = psutil.disk_usage('/')
-        c.gauge('root.total', disk_usage.total)
-        c.gauge('root.used', disk_usage.used)
-        c.gauge('root.free', disk_usage.free)
-        c.gauge('root.percent', disk_usage.percent)
-            
+        with client.pipeline() as pipe:
+            pipe.gauge('root.total', disk_usage.total)
+            pipe.gauge('root.used', disk_usage.used)
+            pipe.gauge('root.free', disk_usage.free)
+            pipe.gauge('root.percent', disk_usage.percent)
+
         time.sleep(10)
 
-def cpu_times():
-    c = statsd.StatsClient('localhost', 8125, prefix='system.cpu')
+
+def cpu_times(host, port, prefix):
+    client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'cpu']))
     while True:
         cpu_times = psutil.cpu_times()
-        c.gauge('system_wide.times.user', cpu_times.user)
-        c.gauge('system_wide.times.nice', cpu_times.nice)
-        c.gauge('system_wide.times.system', cpu_times.system)
-        c.gauge('system_wide.times.idle', cpu_times.idle)
-        c.gauge('system_wide.times.iowait', cpu_times.iowait)
-        c.gauge('system_wide.times.irq', cpu_times.irq)
-        c.gauge('system_wide.times.softirq', cpu_times.softirq)
-        c.gauge('system_wide.times.steal', cpu_times.steal)
-        c.gauge('system_wide.times.guest', cpu_times.guest)
-        c.gauge('system_wide.times.guest_nice', cpu_times.guest_nice)
-        
+        with client.pipeline() as pipe:
+            pipe.gauge('system_wide.times.user', cpu_times.user)
+            pipe.gauge('system_wide.times.nice', cpu_times.nice)
+            pipe.gauge('system_wide.times.system', cpu_times.system)
+            pipe.gauge('system_wide.times.idle', cpu_times.idle)
+            if isLinux:
+                pipe.gauge('system_wide.times.guest_nice', cpu_times.guest_nice)
+                pipe.gauge('system_wide.times.guest', cpu_times.guest)
+                pipe.gauge('system_wide.times.steal', cpu_times.steal)
+                pipe.gauge('system_wide.times.softirq', cpu_times.softirq)
+                pipe.gauge('system_wide.times.iowait', cpu_times.iowait)
+                pipe.gauge('system_wide.times.irq', cpu_times.irq)
+
         time.sleep(10)
 
-def cpu_times_percent():
-    c = statsd.StatsClient('localhost', 8125, prefix='system.cpu')
+
+def cpu_times_percent(host, port, prefix):
+    client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'cpu']))
     while True:
         value = psutil.cpu_percent(interval=1)
-        c.gauge('system_wide.percent', value)
-
         cpu_times_percent = psutil.cpu_times_percent(interval=1)
-        c.gauge('system_wide.times_percent.user', cpu_times_percent.user)
-        c.gauge('system_wide.times_percent.nice', cpu_times_percent.nice)
-        c.gauge('system_wide.times_percent.system', cpu_times_percent.system)
-        c.gauge('system_wide.times_percent.idle', cpu_times_percent.idle)
-        c.gauge('system_wide.times_percent.iowait', cpu_times_percent.iowait)
-        c.gauge('system_wide.times_percent.irq', cpu_times_percent.irq)
-        c.gauge('system_wide.times_percent.softirq', cpu_times_percent.softirq)
-        c.gauge('system_wide.times_percent.steal', cpu_times_percent.steal)
-        c.gauge('system_wide.times_percent.guest', cpu_times_percent.guest)
-        c.gauge('system_wide.times_percent.guest_nice', cpu_times_percent.guest_nice)
-        time.sleep(10)
 
-def memory():
-    c = statsd.StatsClient('localhost', 8125, prefix='system.memory')
+        with client.pipeline() as pipe:
+            pipe.gauge('system_wide.percent', value)
+            pipe.gauge('system_wide.times_percent.user', cpu_times_percent.user)
+            pipe.gauge('system_wide.times_percent.nice', cpu_times_percent.nice)
+            pipe.gauge('system_wide.times_percent.system', cpu_times_percent.system)
+            pipe.gauge('system_wide.times_percent.idle', cpu_times_percent.idle)
+            if isLinux:
+                pipe.gauge('system_wide.times_percent.iowait', cpu_times_percent.iowait)
+                pipe.gauge('system_wide.times_percent.irq', cpu_times_percent.irq)
+                pipe.gauge('system_wide.times_percent.softirq', cpu_times_percent.softirq)
+                pipe.gauge('system_wide.times_percent.steal', cpu_times_percent.steal)
+                pipe.gauge('system_wide.times_percent.guest', cpu_times_percent.guest)
+                pipe.gauge('system_wide.times_percent.guest_nice', cpu_times_percent.guest_nice)
+
+        time.sleep(8)
+
+
+def memory(host, port, prefix):
+    client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'memory']))
     while True:
         swap = psutil.swap_memory()
-        c.gauge('swap.total', swap.total)
-        c.gauge('swap.used', swap.used)
-        c.gauge('swap.free', swap.free)
-        c.gauge('swap.percent', swap.percent)
-
         virtual = psutil.virtual_memory()
-        c.gauge('virtual.total', virtual.total)
-        c.gauge('virtual.available', virtual.available)
-        c.gauge('virtual.used', virtual.used)
-        c.gauge('virtual.free', virtual.free)
-        c.gauge('virtual.percent', virtual.percent)
-        c.gauge('virtual.active', virtual.active)
-        c.gauge('virtual.inactive', virtual.inactive)
-        c.gauge('virtual.buffers', virtual.buffers)
-        c.gauge('virtual.cached', virtual.cached)
-        
+
+        with client.pipeline() as pipe:
+            pipe.gauge('swap.total', swap.total)
+            pipe.gauge('swap.used', swap.used)
+            pipe.gauge('swap.free', swap.free)
+            pipe.gauge('swap.percent', swap.percent)
+            pipe.gauge('virtual.total', virtual.total)
+            pipe.gauge('virtual.available', virtual.available)
+            pipe.gauge('virtual.used', virtual.used)
+            pipe.gauge('virtual.free', virtual.free)
+            pipe.gauge('virtual.percent', virtual.percent)
+            pipe.gauge('virtual.active', virtual.active)
+            pipe.gauge('virtual.inactive', virtual.inactive)
+            if isLinux:
+                pipe.gauge('virtual.buffers', virtual.buffers)
+                pipe.gauge('virtual.cached', virtual.cached)
+
         time.sleep(10)
-        
+
+
 if __name__ == '__main__':
-    multiprocessing.Process(target=disk).start()
-    multiprocessing.Process(target=cpu_times).start()
-    multiprocessing.Process(target=cpu_times_percent).start()
-    multiprocessing.Process(target=memory).start()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--host', '-t', type=str, default='localhost')
+    parser.add_argument('--port', '-p', type=int, default=8125)
+    parser.add_argument('--prefix', '-x', type=str, default='system')
+    args = parser.parse_args()
 
-
+    multiprocessing.Process(target=disk, args=(args.host, args.port, args.prefix)).start()
+    multiprocessing.Process(target=cpu_times, args=(args.host, args.port, args.prefix)).start()
+    multiprocessing.Process(target=cpu_times_percent, args=(args.host, args.port, args.prefix)).start()
+    multiprocessing.Process(target=memory, args=(args.host, args.port, args.prefix)).start()
