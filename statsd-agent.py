@@ -119,11 +119,13 @@ def network(host, port, prefix, nic):
                 print("ERROR: Unknown network interface!")
                 break
 
-            sent = net.bytes_sent - prev_bytes_sent
+            sent = net.bytes_sent - prev_bytes_sent  # B
             recv = net.bytes_recv - prev_bytes_recv
-            elapsed = timer - prev_timer
-            send_rate = sent / elapsed / 1000
-            recv_rate = recv / elapsed / 1000
+            prev_bytes_sent = net.bytes_sent
+            prev_bytes_recv = net.bytes_recv
+            elapsed = timer - prev_timer  # s
+            send_rate = sent / elapsed  # B/s
+            recv_rate = recv / elapsed
             prev_timer = timer
 
             with client.pipeline() as pipe:
