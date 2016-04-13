@@ -6,7 +6,9 @@ import time
 import psutil
 import statsd
 
-isLinux = platform.system() == 'Linux'
+system = platform.system()
+isLinux = system == 'Linux'
+isWindows = system == 'Windows'
 
 
 def disk(host, port, prefix):
@@ -23,7 +25,7 @@ def disk(host, port, prefix):
             time.sleep(10)
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        pass
 
 
 def cpu_times(host, port, prefix):
@@ -33,7 +35,8 @@ def cpu_times(host, port, prefix):
             cpu_times = psutil.cpu_times()
             with client.pipeline() as pipe:
                 pipe.gauge('system_wide.times.user', cpu_times.user)
-                pipe.gauge('system_wide.times.nice', cpu_times.nice)
+                if not isWindows:
+                    pipe.gauge('system_wide.times.nice', cpu_times.nice)
                 pipe.gauge('system_wide.times.system', cpu_times.system)
                 pipe.gauge('system_wide.times.idle', cpu_times.idle)
                 if isLinux:
@@ -47,7 +50,7 @@ def cpu_times(host, port, prefix):
             time.sleep(10)
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        pass
 
 
 def cpu_times_percent(host, port, prefix):
@@ -60,7 +63,8 @@ def cpu_times_percent(host, port, prefix):
             with client.pipeline() as pipe:
                 pipe.gauge('system_wide.percent', value)
                 pipe.gauge('system_wide.times_percent.user', cpu_times_pcnt.user)
-                pipe.gauge('system_wide.times_percent.nice', cpu_times_pcnt.nice)
+                if not isWindows:
+                    pipe.gauge('system_wide.times_percent.nice', cpu_times_pcnt.nice)
                 pipe.gauge('system_wide.times_percent.system', cpu_times_pcnt.system)
                 pipe.gauge('system_wide.times_percent.idle', cpu_times_pcnt.idle)
                 if isLinux:
@@ -74,7 +78,7 @@ def cpu_times_percent(host, port, prefix):
             time.sleep(8)
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        pass
 
 
 def memory(host, port, prefix):
@@ -94,8 +98,9 @@ def memory(host, port, prefix):
                 pipe.gauge('virtual.used', virtual.used)
                 pipe.gauge('virtual.free', virtual.free)
                 pipe.gauge('virtual.percent', virtual.percent)
-                pipe.gauge('virtual.active', virtual.active)
-                pipe.gauge('virtual.inactive', virtual.inactive)
+                if not isWindows:
+                    pipe.gauge('virtual.active', virtual.active)
+                    pipe.gauge('virtual.inactive', virtual.inactive)
                 if isLinux:
                     pipe.gauge('virtual.buffers', virtual.buffers)
                     pipe.gauge('virtual.cached', virtual.cached)
@@ -103,7 +108,7 @@ def memory(host, port, prefix):
             time.sleep(10)
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        pass
 
 
 def network(host, port, prefix, nic):
@@ -135,7 +140,7 @@ def network(host, port, prefix, nic):
             time.sleep(10)
 
     except KeyboardInterrupt:
-        print("Exiting...")
+        pass
 
 
 if __name__ == '__main__':
@@ -143,7 +148,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', '-t', type=str, default='localhost')
     parser.add_argument('--port', '-p', type=int, default=8125)
     parser.add_argument('--prefix', '-x', type=str, default='')
-    parser.add_argument('--network', '--nic', '-n', type=str, default='eth0')
+    parser.add_argument('--network', '--nic', '-n', type=str, default='Local Area Connection' if isWindows else 'eth0')
     args = parser.parse_args()
 
     multiprocessing.Process(target=disk, args=(args.host, args.port, args.prefix)).start()
