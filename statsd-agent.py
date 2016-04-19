@@ -188,7 +188,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', '-t', type=str, default='localhost', help='Hostname or IP of statsd server.')
     parser.add_argument('--port', '-p', type=int, default=8125, help='UDP port number of statsd server.')
-    parser.add_argument('--prefix', '-x', type=str, default='', help='Prefix value to add to each measurement.')
+    parser.add_argument('--prefix', '-x', type=str, default='system', help='Prefix value to add to each measurement.')
     parser.add_argument('--field', '-f', action='append', default=[],
                         help="One or more 'key=value' fields to add to each measurement.")
     parser.add_argument('--network', '--nic', '-n', type=str,
