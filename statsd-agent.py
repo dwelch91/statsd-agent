@@ -2,9 +2,9 @@ import argparse
 import multiprocessing
 import os
 import platform
+import socket
 import sys
 import time
-import socket
 
 import psutil
 import statsd
@@ -14,7 +14,7 @@ isLinux = system == 'Linux'
 isWindows = system == 'Windows'
 
 
-def disk(host, port, prefix, basic, fields, interval=10):
+def disk(host, port, prefix, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'disk']))
         while True:
@@ -38,7 +38,7 @@ def disk(host, port, prefix, basic, fields, interval=10):
         pass
 
 
-def cpu_times(host, port, prefix, basic, fields, interval=10):
+def cpu_times(host, port, prefix, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'cpu']))
         while True:
@@ -69,7 +69,7 @@ def cpu_times(host, port, prefix, basic, fields, interval=10):
         pass
 
 
-def cpu_times_percent(host, port, prefix, basic, fields, interval=10):
+def cpu_times_percent(host, port, prefix, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'cpu']))
         while True:
@@ -99,7 +99,7 @@ def cpu_times_percent(host, port, prefix, basic, fields, interval=10):
         pass
 
 
-def memory(host, port, prefix, basic, fields, interval=10):
+def memory(host, port, prefix, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'memory']))
         while True:
@@ -132,7 +132,7 @@ def memory(host, port, prefix, basic, fields, interval=10):
         pass
 
 
-def network(host, port, prefix, nic, basic, fields, interval=10):
+def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'network']))
         fields += ',nic={}'.format(nic)
@@ -167,14 +167,19 @@ def network(host, port, prefix, nic, basic, fields, interval=10):
         pass
 
 
-def misc(host, port, prefix, _, fields, interval=10):
+def misc(host, port, prefix, _, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix=prefix)
         boot_time = psutil.boot_time()
         client.gauge('boot_time{}'.format(fields), boot_time)
+        if debug:
+            print(boot_time)
         while True:
             with client.pipeline() as pipe:
-                pipe.gauge('uptime{}'.format(fields), time.time() - boot_time)
+                uptime = time.time() - boot_time
+                pipe.gauge('uptime{}'.format(fields), uptime)
+                if debug:
+                    print(uptime)
                 pipe.gauge('users{}'.format(fields), len(psutil.users()))
                 pipe.gauge('processes{}'.format(fields), len(psutil.pids()))
 
@@ -199,13 +204,19 @@ if __name__ == '__main__':
     parser.add_argument('--interval', '-i', type=int, default=10,
                         help='Time in seconds between measurements. Must be > 2.')
     parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
+    parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
     args = parser.parse_args()
     fields = args.field[:]
 
     if args.add_host_field:
-        fields.append("host={}".format(socket.gethostname()))
+        host_field = "host={}".format(socket.gethostname())
+        fields.append(host_field)
+        if args.debug:
+            print(host_field)
 
     fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
+    if args.debug:
+        print(fields)
     if fields:
         fields = ',' + fields
 
@@ -213,9 +224,15 @@ if __name__ == '__main__':
         print("ERROR: Invalid interval (< 3sec).")
         sys.exit(1)
 
-    multiprocessing.Process(target=disk, args=(args.host, args.port, args.prefix, args.basic, fields, args.interval)).start()
-    multiprocessing.Process(target=cpu_times, args=(args.host, args.port, args.prefix, args.basic, fields, args.interval)).start()
-    multiprocessing.Process(target=cpu_times_percent, args=(args.host, args.port, args.prefix, args.basic, fields, args.interval)).start()
-    multiprocessing.Process(target=memory, args=(args.host, args.port, args.prefix, args.basic, fields, args.interval)).start()
-    multiprocessing.Process(target=network, args=(args.host, args.port, args.prefix, args.network, args.basic, fields, args.interval)).start()
-    multiprocessing.Process(target=misc, args=(args.host, args.port, args.prefix, args.basic, fields, args.interval)).start()
+    multiprocessing.Process(target=disk, args=(
+            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
+    multiprocessing.Process(target=cpu_times, args=(
+            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
+    multiprocessing.Process(target=cpu_times_percent, args=(
+            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
+    multiprocessing.Process(target=memory, args=(
+            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
+    multiprocessing.Process(target=network, args=(
+            args.host, args.port, args.prefix, args.network, args.basic, fields, args.interval, args.debug)).start()
+    multiprocessing.Process(target=misc, args=(
+            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
