@@ -20,8 +20,9 @@ isWindows = system == 'Windows'
 
 
 def disk(host, port, prefix, basic, fields, interval=10, debug=False):
+    prefix = '.'.join([prefix, 'disk']) if prefix else 'disk'
     try:
-        client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'disk']))
+        client = statsd.StatsClient(host, port, prefix=prefix)
         while True:
             disk_usage = psutil.disk_usage('/')
             with client.pipeline() as pipe:
@@ -44,8 +45,9 @@ def disk(host, port, prefix, basic, fields, interval=10, debug=False):
 
 
 def cpu_times(host, port, prefix, basic, fields, interval=10, debug=False):
+    prefix = '.'.join([prefix, 'cpu']) if prefix else 'cpu'
     try:
-        client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'cpu']))
+        client = statsd.StatsClient(host, port, prefix=prefix)
         while True:
             cpu_times = psutil.cpu_times()
             with client.pipeline() as pipe:
@@ -75,8 +77,9 @@ def cpu_times(host, port, prefix, basic, fields, interval=10, debug=False):
 
 
 def cpu_times_percent(host, port, prefix, basic, fields, interval=10, debug=False):
+    prefix = '.'.join([prefix, 'cpu']) if prefix else 'cpu'
     try:
-        client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'cpu']))
+        client = statsd.StatsClient(host, port, prefix=prefix)
         while True:
             value = psutil.cpu_percent(interval=1)
             cpu_times_pcnt = psutil.cpu_times_percent(interval=1)
@@ -105,8 +108,9 @@ def cpu_times_percent(host, port, prefix, basic, fields, interval=10, debug=Fals
 
 
 def memory(host, port, prefix, basic, fields, interval=10, debug=False):
+    prefix = '.'.join([prefix, 'memory']) if prefix else 'memory'
     try:
-        client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'memory']))
+        client = statsd.StatsClient(host, port, prefix=prefix)
         while True:
             with client.pipeline() as pipe:
                 virtual = psutil.virtual_memory()
@@ -138,8 +142,9 @@ def memory(host, port, prefix, basic, fields, interval=10, debug=False):
 
 
 def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
+    prefix = '.'.join([prefix, 'network']) if prefix else 'network'
     try:
-        client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'network']))
+        client = statsd.StatsClient(host, port, prefix=prefix)
         if not nic:
             found = False
             nics = psutil.net_if_addrs()
