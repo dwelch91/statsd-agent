@@ -232,6 +232,12 @@ if __name__ == '__main__':
     def get_int(opt, default=0):
         return to_int(get(opt), default)
 
+    def get_boolean(opt, default=False):
+        try:
+            return config.getboolean('statsd-agent', opt)
+        except Error:
+            return default
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--host', '-t', type=str, default=get('host', 'localhost'),
                         help='Hostname or IP of statsd server.')
@@ -251,8 +257,8 @@ if __name__ == '__main__':
     parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
     args = parser.parse_args()
 
-    debug = config.getboolean('statsd-agent', 'debug') or args.debug
-    basic = config.getboolean('statsd-agent', 'basic') or args.basic
+    debug = get_boolean('debug') or args.debug
+    basic = get_boolean('basic') or args.basic
     prefix = args.prefix if args.prefix else ''
 
     if debug:
@@ -267,13 +273,21 @@ if __name__ == '__main__':
             fields.append(field)
             field_set.add(name)
 
-    for option in config.options('fields'):
-        value = config.get('fields', option)
+    try:
+        cfg_fields = config.options('fields')
+    except Error:
+        cfg_fields = []
+
+    for option in cfg_fields:
+        try:
+            value = config.get('fields', option)
+        except Error:
+            continue
         if value and option not in field_set:
             fields.append("{}={}".format(option, value))
             field_set.add(option)
 
-    if config.getboolean('statsd-agent', 'add-host-field') or args.add_host_field and 'host' not in field_set:
+    if get_boolean('add-host-field', False) or args.add_host_field and 'host' not in field_set:
         fields.append("host={}".format(socket.gethostname()))
 
     fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
