@@ -136,7 +136,7 @@ def memory(host, port, prefix, basic, fields, interval=10, debug=False):
 def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'network']))
-        if nic is None:
+        if not nic:
             found = False
             nics = psutil.net_if_addrs()
             for n, info in nics.items():
