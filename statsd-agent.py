@@ -5,7 +5,11 @@ import platform
 import socket
 import sys
 import time
-from ConfigParser import RawConfigParser
+
+try:
+    from ConfigParser import RawConfigParser, Error
+except ImportError:
+    from configparser import RawConfigParser, Error
 
 import psutil
 import statsd
@@ -208,32 +212,40 @@ def misc(host, port, prefix, _, fields, interval=10, debug=False):
         pass
 
 
-def to_int(v, d):
+def to_int(value, default):
     try:
-        return int(v)
+        return int(value)
     except (ValueError, TypeError):
-        return d
+        return default
 
 
 if __name__ == '__main__':
     config = RawConfigParser(allow_no_value=True)
     config.read('statsd-agent.cfg')
 
+    def get(opt, default=''):
+        try:
+            return config.get('statsd-agent', opt)
+        except Error:
+            return default
+
+    def get_int(opt, default=0):
+        return to_int(get(opt), default)
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--host', '-t', type=str, default=config.get('statsd-agent', 'host') or 'localhost',
+    parser.add_argument('--host', '-t', type=str, default=get('host', 'localhost'),
                         help='Hostname or IP of statsd server.')
-    parser.add_argument('--port', '-p', type=int, default=to_int(config.getint('statsd-agent', 'port'), 8125),
+    parser.add_argument('--port', '-p', type=int, default=get_int('port', 8125),
                         help='UDP port number of statsd server.')
-    parser.add_argument('--prefix', '-x', type=str, default=config.get('statsd-agent', 'prefix'),
+    parser.add_argument('--prefix', '-x', type=str, default=get('prefix'),
                         help='Prefix value to add to each measurement.')
     parser.add_argument('--field', '-f', action='append', default=[],
                         help="One or more 'key=value' fields to add to each measurement.")
     parser.add_argument('--network', '--nic', '-n', type=str,
-                        default=config.get('statsd-agent', 'nic'),
-                        help='NIC to measure.')
+                        default=get('nic'), help='NIC to measure.')
     parser.add_argument('--basic', '-b', action='store_true',
                         help='If set, only basic measurements gathered and sent to statsd.')
-    parser.add_argument('--interval', '-i', type=int, default=to_int(config.getint('statsd-agent', 'interval'), 10),
+    parser.add_argument('--interval', '-i', type=int, default=get_int('interval', 10),
                         help='Time in seconds between measurements. Must be > 2.')
     parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
     parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
@@ -244,7 +256,7 @@ if __name__ == '__main__':
     prefix = args.prefix if args.prefix else ''
 
     if debug:
-        print("host:port={}:{}".format(args.host, args.port))
+        print("host={}:{}".format(args.host, args.port))
         print("prefix={}".format(prefix))
 
     fields = []
@@ -267,7 +279,7 @@ if __name__ == '__main__':
     fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
 
     if debug:
-        print("fields={}".format(fields))
+        print("fields: {}".format(fields))
 
     if fields:
         fields = ',' + fields
