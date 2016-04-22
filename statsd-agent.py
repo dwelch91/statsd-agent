@@ -229,7 +229,7 @@ if __name__ == '__main__':
     parser.add_argument('--field', '-f', action='append', default=[],
                         help="One or more 'key=value' fields to add to each measurement.")
     parser.add_argument('--network', '--nic', '-n', type=str,
-                        default=config.get('statsd-agent', 'nic') or None,
+                        default=config.get('statsd-agent', 'nic'),
                         help='NIC to measure.')
     parser.add_argument('--basic', '-b', action='store_true',
                         help='If set, only basic measurements gathered and sent to statsd.')
@@ -255,7 +255,7 @@ if __name__ == '__main__':
 
     debug = config.getboolean('statsd-agent', 'debug') or args.debug
     basic = config.getboolean('statsd-agent', 'basic') or args.basic
-    prefix = args.prefix if args.prefix else None
+    prefix = args.prefix if args.prefix else ''
 
     if config.getboolean('statsd-agent', 'add-host-field') or args.add_host_field:
         host_field = "host={}".format(socket.gethostname())
