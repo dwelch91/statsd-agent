@@ -5,7 +5,7 @@ import platform
 import socket
 import sys
 import time
-from configparser import ConfigParser
+from ConfigParser import RawConfigParser
 
 import psutil
 import statsd
@@ -216,7 +216,7 @@ def to_int(v, d):
 
 
 if __name__ == '__main__':
-    config = ConfigParser.RawConfigParser(allow_no_value=True)
+    config = RawConfigParser(allow_no_value=True)
     config.read('statsd-agent.cfg')
 
     parser = argparse.ArgumentParser()
