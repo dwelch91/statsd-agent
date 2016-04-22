@@ -244,7 +244,7 @@ if __name__ == '__main__':
     prefix = args.prefix if args.prefix else ''
 
     if debug:
-        print("host:port={}:{}",format(args.host, args.port))
+        print("host:port={}:{}".format(args.host, args.port))
         print("prefix={}".format(prefix))
 
     fields = []
