@@ -135,6 +135,21 @@ def memory(host, port, prefix, basic, fields, interval=10, debug=False):
 def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
     try:
         client = statsd.StatsClient(host, port, prefix='.'.join([prefix, 'network']))
+        if nic is None:
+            found = False
+            nics = psutil.net_if_addrs()
+            for n, info in nics.items():
+                for addr in info:
+                    if addr.family == socket.AF_INET and addr.address.startswith('10.'):
+                        nic = n
+                        found = True
+                        break
+                if found:
+                    break
+            else:
+                print("ERROR: Could not locate 10.x.x.x network interface!")
+                return
+
         fields += ',nic={}'.format(nic)
         prev_bytes_sent, prev_bytes_recv, prev_timer = 0, 0, 0
         while True:
@@ -143,7 +158,7 @@ def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
                 timer = time.time()
             except KeyError:
                 print("ERROR: Unknown network interface!")
-                break
+                return
 
             sent = net.bytes_sent - prev_bytes_sent  # B
             recv = net.bytes_recv - prev_bytes_recv
@@ -197,7 +212,7 @@ if __name__ == '__main__':
     parser.add_argument('--field', '-f', action='append', default=[],
                         help="One or more 'key=value' fields to add to each measurement.")
     parser.add_argument('--network', '--nic', '-n', type=str,
-                        default='Local Area Connection' if isWindows else 'eth0' if isLinux else 'en0',
+                        default=None if isWindows else 'eth0' if isLinux else 'en0',
                         help='NIC to measure.')
     parser.add_argument('--basic', '-b', action='store_true',
                         help='If set, only basic measurements gathered and sent to statsd.')
