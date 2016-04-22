@@ -152,7 +152,7 @@ def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
                 return
 
         if debug:
-            print(nic)
+            print("nic={}".format(nic))
 
         fields += ',nic={}'.format(nic)
         prev_bytes_sent, prev_bytes_recv, prev_timer = 0, 0, 0
@@ -192,13 +192,13 @@ def misc(host, port, prefix, _, fields, interval=10, debug=False):
         boot_time = psutil.boot_time()
         client.gauge('boot_time{}'.format(fields), boot_time)
         if debug:
-            print(boot_time)
+            print("boot_time={}".format(boot_time))
         while True:
             with client.pipeline() as pipe:
                 uptime = time.time() - boot_time
                 pipe.gauge('uptime{}'.format(fields), uptime)
                 if debug:
-                    print(uptime)
+                    print("uptime={}".format(uptime))
                 pipe.gauge('users{}'.format(fields), len(psutil.users()))
                 pipe.gauge('processes{}'.format(fields), len(psutil.pids()))
 
@@ -239,6 +239,14 @@ if __name__ == '__main__':
     parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
     args = parser.parse_args()
 
+    debug = config.getboolean('statsd-agent', 'debug') or args.debug
+    basic = config.getboolean('statsd-agent', 'basic') or args.basic
+    prefix = args.prefix if args.prefix else ''
+
+    if debug:
+        print("host:port={}:{}",format(args.host, args.port))
+        print("prefix={}".format(prefix))
+
     fields = []
     field_set = set()
     for field in args.field:
@@ -253,19 +261,14 @@ if __name__ == '__main__':
             fields.append("{}={}".format(option, value))
             field_set.add(option)
 
-    debug = config.getboolean('statsd-agent', 'debug') or args.debug
-    basic = config.getboolean('statsd-agent', 'basic') or args.basic
-    prefix = args.prefix if args.prefix else ''
-
-    if config.getboolean('statsd-agent', 'add-host-field') or args.add_host_field:
-        host_field = "host={}".format(socket.gethostname())
-        fields.append(host_field)
-        if debug:
-            print(host_field)
+    if config.getboolean('statsd-agent', 'add-host-field') or args.add_host_field and 'host' not in field_set:
+        fields.append("host={}".format(socket.gethostname()))
 
     fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
+
     if debug:
-        print(fields)
+        print("fields={}".format(fields))
+
     if fields:
         fields = ',' + fields
 
