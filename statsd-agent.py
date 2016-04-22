@@ -150,6 +150,9 @@ def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
                 print("ERROR: Could not locate 10.x.x.x network interface!")
                 return
 
+        if debug:
+            print(nic)
+
         fields += ',nic={}'.format(nic)
         prev_bytes_sent, prev_bytes_recv, prev_timer = 0, 0, 0
         while True:
