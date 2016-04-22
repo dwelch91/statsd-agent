@@ -5,6 +5,7 @@ import platform
 import socket
 import sys
 import time
+from configparser import ConfigParser
 
 import psutil
 import statsd
@@ -207,33 +208,63 @@ def misc(host, port, prefix, _, fields, interval=10, debug=False):
         pass
 
 
+def to_int(v, d):
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return d
+
+
 if __name__ == '__main__':
+    config = ConfigParser.RawConfigParser(allow_no_value=True)
+    config.read('statsd-agent.cfg')
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--host', '-t', type=str, default='localhost', help='Hostname or IP of statsd server.')
-    parser.add_argument('--port', '-p', type=int, default=8125, help='UDP port number of statsd server.')
-    parser.add_argument('--prefix', '-x', type=str, default='system', help='Prefix value to add to each measurement.')
+    parser.add_argument('--host', '-t', type=str, default=config.get('statsd-agent', 'host') or 'localhost',
+                        help='Hostname or IP of statsd server.')
+    parser.add_argument('--port', '-p', type=int, default=to_int(config.getint('statsd-agent', 'port'), 8125),
+                        help='UDP port number of statsd server.')
+    parser.add_argument('--prefix', '-x', type=str, default=config.get('statsd-agent', 'prefix'),
+                        help='Prefix value to add to each measurement.')
     parser.add_argument('--field', '-f', action='append', default=[],
                         help="One or more 'key=value' fields to add to each measurement.")
     parser.add_argument('--network', '--nic', '-n', type=str,
-                        default=None if isWindows else 'eth0' if isLinux else 'en0',
+                        default=config.get('statsd-agent', 'nic') or None,
                         help='NIC to measure.')
     parser.add_argument('--basic', '-b', action='store_true',
                         help='If set, only basic measurements gathered and sent to statsd.')
-    parser.add_argument('--interval', '-i', type=int, default=10,
+    parser.add_argument('--interval', '-i', type=int, default=to_int(config.getint('statsd-agent', 'interval')) or 10,
                         help='Time in seconds between measurements. Must be > 2.')
     parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
     parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
     args = parser.parse_args()
-    fields = args.field[:]
 
-    if args.add_host_field:
+    fields = []
+    field_set = set()
+    for field in args.field:
+        name, value = field.split('=', 1)
+        if name not in field_set:
+            fields.append(field)
+            field_set.add(name)
+
+    for option in config.options('fields'):
+        value = config.get('fields', option)
+        if value and option not in field_set:
+            fields.append("{}={}".format(option, value))
+            field_set.add(option)
+
+    debug = config.getboolean('statsd-agent', 'debug') or args.debug
+    basic = config.getboolean('statsd-agent', 'basic') or args.basic
+    prefix = args.prefix if args.prefix else None
+
+    if config.getboolean('statsd-agent', 'add-host-field') or args.add_host_field:
         host_field = "host={}".format(socket.gethostname())
         fields.append(host_field)
-        if args.debug:
+        if debug:
             print(host_field)
 
     fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
-    if args.debug:
+    if debug:
         print(fields)
     if fields:
         fields = ',' + fields
@@ -242,15 +273,9 @@ if __name__ == '__main__':
         print("ERROR: Invalid interval (< 3sec).")
         sys.exit(1)
 
-    multiprocessing.Process(target=disk, args=(
-            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
-    multiprocessing.Process(target=cpu_times, args=(
-            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
-    multiprocessing.Process(target=cpu_times_percent, args=(
-            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
-    multiprocessing.Process(target=memory, args=(
-            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
-    multiprocessing.Process(target=network, args=(
-            args.host, args.port, args.prefix, args.network, args.basic, fields, args.interval, args.debug)).start()
-    multiprocessing.Process(target=misc, args=(
-            args.host, args.port, args.prefix, args.basic, fields, args.interval, args.debug)).start()
+    multiprocessing.Process(target=disk, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
+    multiprocessing.Process(target=cpu_times, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
+    multiprocessing.Process(target=cpu_times_percent, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
+    multiprocessing.Process(target=memory, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
+    multiprocessing.Process(target=network, args=(args.host, args.port, prefix, args.network, basic, fields, args.interval, debug)).start()
+    multiprocessing.Process(target=misc, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
