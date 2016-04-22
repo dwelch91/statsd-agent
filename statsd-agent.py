@@ -233,7 +233,7 @@ if __name__ == '__main__':
                         help='NIC to measure.')
     parser.add_argument('--basic', '-b', action='store_true',
                         help='If set, only basic measurements gathered and sent to statsd.')
-    parser.add_argument('--interval', '-i', type=int, default=to_int(config.getint('statsd-agent', 'interval')) or 10,
+    parser.add_argument('--interval', '-i', type=int, default=to_int(config.getint('statsd-agent', 'interval'), 10),
                         help='Time in seconds between measurements. Must be > 2.')
     parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
     parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
