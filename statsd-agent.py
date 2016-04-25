@@ -1,10 +1,9 @@
 import argparse
-
-import os
 import platform
-import socket
-import sys
 import time
+import socket
+import os
+import sys
 
 try:
     from ConfigParser import RawConfigParser, Error
@@ -18,245 +17,6 @@ system = platform.system()
 isLinux = system == 'Linux'
 isWindows = system == 'Windows'
 
-import os
-import sys
-
-# https://github.com/pyinstaller/pyinstaller/wiki/Recipe-Multiprocessing
-
-# Module multiprocessing is organized differently in Python 3.4+
-try:
-    # Python 3.4+
-    if isWindows:
-        import multiprocessing.popen_spawn_win32 as forking
-    else:
-        import multiprocessing.popen_fork as forking
-except ImportError:
-    import multiprocessing.forking as forking
-
-if isWindows:
-    # First define a modified version of Popen.
-    class _Popen(forking.Popen):
-        def __init__(self, *args, **kw):
-            if hasattr(sys, 'frozen'):
-                # We have to set original _MEIPASS2 value from sys._MEIPASS
-                # to get --onefile mode working.
-                os.putenv('_MEIPASS2', sys._MEIPASS)
-            try:
-                super(_Popen, self).__init__(*args, **kw)
-            finally:
-                if hasattr(sys, 'frozen'):
-                    # On some platforms (e.g. AIX) 'os.unsetenv()' is not
-                    # available. In those cases we cannot delete the variable
-                    # but only set it to the empty string. The bootloader
-                    # can handle this case.
-                    if hasattr(os, 'unsetenv'):
-                        os.unsetenv('_MEIPASS2')
-                    else:
-                        os.putenv('_MEIPASS2', '')
-
-    # Second override 'Popen' class with our modified version.
-    forking.Popen = _Popen
-
-import multiprocessing
-
-
-def disk(host, port, prefix, basic, fields, interval=10, debug=False):
-    prefix = '.'.join([prefix, 'disk']) if prefix else 'disk'
-    try:
-        client = statsd.StatsClient(host, port, prefix=prefix)
-        while True:
-            disk_usage = psutil.disk_usage('/')
-            with client.pipeline() as pipe:
-                pipe.gauge('root.total{}'.format(fields), disk_usage.total)
-                pipe.gauge('root.used{}'.format(fields), disk_usage.used)
-                pipe.gauge('root.free{}'.format(fields), disk_usage.free)
-                pipe.gauge('root.percent{}'.format(fields), disk_usage.percent)
-
-                if not basic:
-                    counters = psutil.disk_io_counters(False)
-                    pipe.gauge('all.read_time{}'.format(fields), counters.read_time)
-                    pipe.gauge('all.write_time{}'.format(fields), counters.write_time)
-                    if isLinux:
-                        pipe.gauge('all.busy_time{}'.format(fields), counters.busy_time)
-
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        pass
-
-
-def cpu_times(host, port, prefix, basic, fields, interval=10, debug=False):
-    prefix = '.'.join([prefix, 'cpu']) if prefix else 'cpu'
-    try:
-        client = statsd.StatsClient(host, port, prefix=prefix)
-        while True:
-            cpu_times = psutil.cpu_times()
-            with client.pipeline() as pipe:
-                pipe.gauge('times.user{}'.format(fields), cpu_times.user)
-                pipe.gauge('times.system{}'.format(fields), cpu_times.system)
-                pipe.gauge('times.idle{}'.format(fields), cpu_times.idle)
-
-                if not isWindows:
-                    pipe.gauge('times.nice{}'.format(fields), cpu_times.nice)
-                    load = os.getloadavg()
-                    pipe.gauge('loadavg.1{}'.format(fields), load[0])
-                    pipe.gauge('loadavg.5{}'.format(fields), load[1])
-                    pipe.gauge('loadavg.15{}'.format(fields), load[2])
-
-                if isLinux and not basic:
-                    pipe.gauge('times.guest_nice{}'.format(fields), cpu_times.guest_nice)
-                    pipe.gauge('times.guest{}'.format(fields), cpu_times.guest)
-                    pipe.gauge('times.steal{}'.format(fields), cpu_times.steal)
-                    pipe.gauge('times.softirq{}'.format(fields), cpu_times.softirq)
-                    pipe.gauge('times.iowait{}'.format(fields), cpu_times.iowait)
-                    pipe.gauge('times.irq{}'.format(fields), cpu_times.irq)
-
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        pass
-
-
-def cpu_times_percent(host, port, prefix, basic, fields, interval=10, debug=False):
-    prefix = '.'.join([prefix, 'cpu']) if prefix else 'cpu'
-    try:
-        client = statsd.StatsClient(host, port, prefix=prefix)
-        while True:
-            value = psutil.cpu_percent(interval=1)
-            cpu_times_pcnt = psutil.cpu_times_percent(interval=1)
-
-            with client.pipeline() as pipe:
-                pipe.gauge('percent{}'.format(fields), value)
-                pipe.gauge('percent.user{}'.format(fields), cpu_times_pcnt.user)
-                pipe.gauge('percent.system{}'.format(fields), cpu_times_pcnt.system)
-                pipe.gauge('percent.idle{}'.format(fields), cpu_times_pcnt.idle)
-
-                if not isWindows:
-                    pipe.gauge('percent.nice{}'.format(fields), cpu_times_pcnt.nice)
-
-                if isLinux and not basic:
-                    pipe.gauge('percent.iowait{}'.format(fields), cpu_times_pcnt.iowait)
-                    pipe.gauge('percent.irq{}'.format(fields), cpu_times_pcnt.irq)
-                    pipe.gauge('percent.softirq{}'.format(fields), cpu_times_pcnt.softirq)
-                    pipe.gauge('percent.steal{}'.format(fields), cpu_times_pcnt.steal)
-                    pipe.gauge('percent.guest{}'.format(fields), cpu_times_pcnt.guest)
-                    pipe.gauge('percent.guest_nice{}'.format(fields), cpu_times_pcnt.guest_nice)
-
-            time.sleep(interval - 2)
-
-    except KeyboardInterrupt:
-        pass
-
-
-def memory(host, port, prefix, basic, fields, interval=10, debug=False):
-    prefix = '.'.join([prefix, 'memory']) if prefix else 'memory'
-    try:
-        client = statsd.StatsClient(host, port, prefix=prefix)
-        while True:
-            with client.pipeline() as pipe:
-                virtual = psutil.virtual_memory()
-                pipe.gauge('virtual.total{}'.format(fields), virtual.total)
-                pipe.gauge('virtual.available{}'.format(fields), virtual.available)
-                pipe.gauge('virtual.used{}'.format(fields), virtual.used)
-                pipe.gauge('virtual.free{}'.format(fields), virtual.free)
-                pipe.gauge('virtual.percent{}'.format(fields), virtual.percent)
-
-                if not basic:
-                    swap = psutil.swap_memory()
-                    pipe.gauge('swap.total{}'.format(fields), swap.total)
-                    pipe.gauge('swap.used{}'.format(fields), swap.used)
-                    pipe.gauge('swap.free{}'.format(fields), swap.free)
-                    pipe.gauge('swap.percent{}'.format(fields), swap.percent)
-
-                if not isWindows and not basic:
-                    pipe.gauge('virtual.active{}'.format(fields), virtual.active)
-                    pipe.gauge('virtual.inactive{}'.format(fields), virtual.inactive)
-
-                if isLinux and not basic:
-                    pipe.gauge('virtual.buffers{}'.format(fields), virtual.buffers)
-                    pipe.gauge('virtual.cached{}'.format(fields), virtual.cached)
-
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        pass
-
-
-def network(host, port, prefix, nic, basic, fields, interval=10, debug=False):
-    prefix = '.'.join([prefix, 'network']) if prefix else 'network'
-    try:
-        client = statsd.StatsClient(host, port, prefix=prefix)
-        if not nic:
-            found = False
-            nics = psutil.net_if_addrs()
-            for n, info in nics.items():
-                for addr in info:
-                    if addr.family == socket.AF_INET and addr.address.startswith('10.'):
-                        nic = n
-                        found = True
-                        break
-                if found:
-                    break
-            else:
-                print("ERROR: Could not locate 10.x.x.x network interface!")
-                return
-
-        if debug:
-            print("nic={}".format(nic))
-
-        fields += ',nic={}'.format(nic)
-        prev_bytes_sent, prev_bytes_recv, prev_timer = 0, 0, 0
-        while True:
-            try:
-                net = psutil.net_io_counters(True)[nic]
-                timer = time.time()
-            except KeyError:
-                print("ERROR: Unknown network interface!")
-                return
-
-            sent = net.bytes_sent - prev_bytes_sent  # B
-            recv = net.bytes_recv - prev_bytes_recv
-            prev_bytes_sent = net.bytes_sent
-            prev_bytes_recv = net.bytes_recv
-            elapsed = timer - prev_timer  # s
-            send_rate = sent / elapsed  # B/s
-            recv_rate = recv / elapsed
-            prev_timer = timer
-
-            with client.pipeline() as pipe:
-                pipe.gauge('send_rate{}'.format(fields), send_rate)
-                pipe.gauge('recv_rate{}'.format(fields), recv_rate)
-                if not basic:
-                    pipe.gauge('send_errors{}'.format(fields), net.errin)
-                    pipe.gauge('recv_errors{}'.format(fields), net.errout)
-
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        pass
-
-
-def misc(host, port, prefix, _, fields, interval=10, debug=False):
-    try:
-        client = statsd.StatsClient(host, port, prefix=prefix)
-        boot_time = psutil.boot_time()
-        client.gauge('boot_time{}'.format(fields), boot_time)
-        if debug:
-            print("boot_time={}".format(boot_time))
-        while True:
-            with client.pipeline() as pipe:
-                uptime = time.time() - boot_time
-                pipe.gauge('uptime{}'.format(fields), uptime)
-                if debug:
-                    print("uptime={}".format(uptime))
-                pipe.gauge('users{}'.format(fields), len(psutil.users()))
-                pipe.gauge('processes{}'.format(fields), len(psutil.pids()))
-
-            time.sleep(interval)
-
-    except KeyboardInterrupt:
-        pass
-
 
 def to_int(value, default):
     try:
@@ -265,7 +25,150 @@ def to_int(value, default):
         return default
 
 
-if __name__ == '__main__':
+def disk(host, port, prefix, fields, debug=False):
+    prefix = '.'.join([prefix, 'disk']) if prefix else 'disk'
+    client = statsd.StatsClient(host, port, prefix=prefix)
+    disk_usage = psutil.disk_usage('/')
+    with client.pipeline() as pipe:
+        pipe.gauge('root.total{}'.format(fields), disk_usage.total)
+        pipe.gauge('root.used{}'.format(fields), disk_usage.used)
+        pipe.gauge('root.free{}'.format(fields), disk_usage.free)
+        pipe.gauge('root.percent{}'.format(fields), disk_usage.percent)
+
+        counters = psutil.disk_io_counters(False)
+        pipe.gauge('all.read_time{}'.format(fields), counters.read_time)
+        pipe.gauge('all.write_time{}'.format(fields), counters.write_time)
+        if isLinux:
+            pipe.gauge('all.busy_time{}'.format(fields), counters.busy_time)
+
+
+def cpu_times(host, port, prefix, fields, debug=False):
+    prefix = '.'.join([prefix, 'cpu']) if prefix else 'cpu'
+    client = statsd.StatsClient(host, port, prefix=prefix)
+    cpu_times = psutil.cpu_times()
+    with client.pipeline() as pipe:
+        pipe.gauge('times.user{}'.format(fields), cpu_times.user)
+        pipe.gauge('times.system{}'.format(fields), cpu_times.system)
+        pipe.gauge('times.idle{}'.format(fields), cpu_times.idle)
+
+        if not isWindows:
+            pipe.gauge('times.nice{}'.format(fields), cpu_times.nice)
+            load = os.getloadavg()
+            pipe.gauge('loadavg.1{}'.format(fields), load[0])
+            pipe.gauge('loadavg.5{}'.format(fields), load[1])
+            pipe.gauge('loadavg.15{}'.format(fields), load[2])
+
+        if isLinux:
+            pipe.gauge('times.guest_nice{}'.format(fields), cpu_times.guest_nice)
+            pipe.gauge('times.guest{}'.format(fields), cpu_times.guest)
+            pipe.gauge('times.steal{}'.format(fields), cpu_times.steal)
+            pipe.gauge('times.softirq{}'.format(fields), cpu_times.softirq)
+            pipe.gauge('times.iowait{}'.format(fields), cpu_times.iowait)
+            pipe.gauge('times.irq{}'.format(fields), cpu_times.irq)
+
+
+def cpu_times_percent(host, port, prefix, fields, debug=False):
+    prefix = '.'.join([prefix, 'cpu']) if prefix else 'cpu'
+    client = statsd.StatsClient(host, port, prefix=prefix)
+    value = psutil.cpu_percent(interval=1)
+    cpu_times_pcnt = psutil.cpu_times_percent(interval=1)
+
+    with client.pipeline() as pipe:
+        pipe.gauge('percent{}'.format(fields), value)
+        pipe.gauge('percent.user{}'.format(fields), cpu_times_pcnt.user)
+        pipe.gauge('percent.system{}'.format(fields), cpu_times_pcnt.system)
+        pipe.gauge('percent.idle{}'.format(fields), cpu_times_pcnt.idle)
+
+        if not isWindows:
+            pipe.gauge('percent.nice{}'.format(fields), cpu_times_pcnt.nice)
+
+        if isLinux:
+            pipe.gauge('percent.iowait{}'.format(fields), cpu_times_pcnt.iowait)
+            pipe.gauge('percent.irq{}'.format(fields), cpu_times_pcnt.irq)
+            pipe.gauge('percent.softirq{}'.format(fields), cpu_times_pcnt.softirq)
+            pipe.gauge('percent.steal{}'.format(fields), cpu_times_pcnt.steal)
+            pipe.gauge('percent.guest{}'.format(fields), cpu_times_pcnt.guest)
+            pipe.gauge('percent.guest_nice{}'.format(fields), cpu_times_pcnt.guest_nice)
+
+
+def memory(host, port, prefix, fields, debug=False):
+    prefix = '.'.join([prefix, 'memory']) if prefix else 'memory'
+    client = statsd.StatsClient(host, port, prefix=prefix)
+    with client.pipeline() as pipe:
+        virtual = psutil.virtual_memory()
+        pipe.gauge('virtual.total{}'.format(fields), virtual.total)
+        pipe.gauge('virtual.available{}'.format(fields), virtual.available)
+        pipe.gauge('virtual.used{}'.format(fields), virtual.used)
+        pipe.gauge('virtual.free{}'.format(fields), virtual.free)
+        pipe.gauge('virtual.percent{}'.format(fields), virtual.percent)
+
+        swap = psutil.swap_memory()
+        pipe.gauge('swap.total{}'.format(fields), swap.total)
+        pipe.gauge('swap.used{}'.format(fields), swap.used)
+        pipe.gauge('swap.free{}'.format(fields), swap.free)
+        pipe.gauge('swap.percent{}'.format(fields), swap.percent)
+
+        if not isWindows:
+            pipe.gauge('virtual.active{}'.format(fields), virtual.active)
+            pipe.gauge('virtual.inactive{}'.format(fields), virtual.inactive)
+
+        if isLinux:
+            pipe.gauge('virtual.buffers{}'.format(fields), virtual.buffers)
+            pipe.gauge('virtual.cached{}'.format(fields), virtual.cached)
+
+
+prev_bytes_sent, prev_bytes_recv, prev_timer = 0, 0, 0
+
+
+def network(host, port, prefix, fields, nic, debug=False):
+    global prev_bytes_sent, prev_bytes_recv, prev_timer
+
+    try:
+        net = psutil.net_io_counters(True)[nic]
+    except KeyError:
+        return
+    timer = time.time()
+    prefix = '.'.join([prefix, 'network']) if prefix else 'network'
+    client = statsd.StatsClient(host, port, prefix=prefix)
+    sent = net.bytes_sent - prev_bytes_sent  # B
+    recv = net.bytes_recv - prev_bytes_recv
+    prev_bytes_sent = net.bytes_sent
+    prev_bytes_recv = net.bytes_recv
+    elapsed = timer - prev_timer  # s
+    send_rate = sent / elapsed  # B/s
+    recv_rate = recv / elapsed
+    prev_timer = timer
+
+    with client.pipeline() as pipe:
+        pipe.gauge('send_rate{}'.format(fields), send_rate)
+        pipe.gauge('recv_rate{}'.format(fields), recv_rate)
+        pipe.gauge('send_errors{}'.format(fields), net.errin)
+        pipe.gauge('recv_errors{}'.format(fields), net.errout)
+
+
+def misc(host, port, prefix, fields, debug=False):
+    boot_time = psutil.boot_time()
+    uptime = time.time() - boot_time
+    client = statsd.StatsClient(host, port, prefix=prefix)
+    with client.pipeline() as pipe:
+        pipe.gauge('uptime{}'.format(fields), uptime)
+        if debug:
+            print("uptime={}".format(uptime))
+
+        pipe.gauge('users{}'.format(fields), len(psutil.users()))
+        pipe.gauge('processes{}'.format(fields), len(psutil.pids()))
+
+
+def run_once(host, port, prefix, fields, nic, debug=False):
+    misc(host, port, prefix, fields, debug)
+    network(host, port, prefix, fields, nic, debug)
+    memory(host, port, prefix, fields, debug)
+    cpu_times(host, port, prefix, fields, debug)
+    cpu_times_percent(host, port, prefix, fields, debug)
+    disk(host, port, prefix, fields, debug)
+
+
+def main():
     config = RawConfigParser(allow_no_value=True)
     config.read('statsd-agent.cfg')
 
@@ -284,73 +187,153 @@ if __name__ == '__main__':
         except Error:
             return default
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--host', '-t', type=str, default=get('host', 'localhost'),
-                        help='Hostname or IP of statsd server.')
-    parser.add_argument('--port', '-p', type=int, default=get_int('port', 8125),
-                        help='UDP port number of statsd server.')
-    parser.add_argument('--prefix', '-x', type=str, default=get('prefix'),
-                        help='Prefix value to add to each measurement.')
-    parser.add_argument('--field', '-f', action='append', default=[],
-                        help="One or more 'key=value' fields to add to each measurement.")
-    parser.add_argument('--network', '--nic', '-n', type=str,
-                        default=get('nic'), help='NIC to measure.')
-    parser.add_argument('--basic', '-b', action='store_true',
-                        help='If set, only basic measurements gathered and sent to statsd.')
-    parser.add_argument('--interval', '-i', type=int, default=get_int('interval', 10),
-                        help='Time in seconds between measurements. Must be > 2.')
-    parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
-    parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
-    args = parser.parse_args()
+    def get_fields(arg_fields=None, arg_add_host_field=True):
+        if arg_fields is None:
+            arg_fields = []
 
-    debug = get_boolean('debug') or args.debug
-    basic = get_boolean('basic') or args.basic
-    prefix = args.prefix if args.prefix else ''
+        fields = []
+        field_set = set()
+        for field in arg_fields:
+            name, value = field.split('=', 1)
+            if name not in field_set:
+                fields.append(field)
+                field_set.add(name)
 
-    if debug:
-        print("host={}:{}".format(args.host, args.port))
-        print("prefix={}".format(prefix))
-
-    fields = []
-    field_set = set()
-    for field in args.field:
-        name, value = field.split('=', 1)
-        if name not in field_set:
-            fields.append(field)
-            field_set.add(name)
-
-    try:
-        cfg_fields = config.options('fields')
-    except Error:
-        cfg_fields = []
-
-    for option in cfg_fields:
         try:
-            value = config.get('fields', option)
+            cfg_fields = config.options('fields')
         except Error:
-            continue
-        if value and option not in field_set:
-            fields.append("{}={}".format(option, value))
-            field_set.add(option)
+            cfg_fields = []
 
-    if get_boolean('add-host-field', False) or args.add_host_field and 'host' not in field_set:
-        fields.append("host={}".format(socket.gethostname()))
+        for option in cfg_fields:
+            try:
+                value = config.get('fields', option)
+            except Error:
+                continue
+            if '<insert service' in value:
+                print("ERROR: Set the service type in statsd-agent.cfg")
+                continue
 
-    fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
+            if value and option not in field_set:
+                fields.append("{}={}".format(option, value))
+                field_set.add(option)
 
-    if debug:
-        print("fields: {}".format(fields))
+        if get_boolean('add-host-field', False) or arg_add_host_field and 'host' not in field_set:
+            fields.append("host={}".format(socket.gethostname()))
 
-    if fields:
-        fields = ',' + fields
+        return ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
 
-    if args.interval < 3:
-        print("ERROR: Invalid interval (< 3sec).")
-        sys.exit(1)
+    def get_nic(netiface):
+        if not netiface:
+            found = False
+            nics = psutil.net_if_addrs()
+            for n, info in nics.items():
+                for addr in info:
+                    if addr.family == socket.AF_INET and addr.address.startswith('10.'):
+                        netiface = n
+                        found = True
+                        break
+                if found:
+                    break
+            else:
+                return
 
-    multiprocessing.Process(target=disk, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
-    multiprocessing.Process(target=cpu_times, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
-    multiprocessing.Process(target=cpu_times_percent, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
-    multiprocessing.Process(target=memory, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
-    multiprocessing.Process(target=network, args=(args.host, args.port, prefix, args.network, basic, fields, args.interval, debug)).start()
-    multiprocessing.Process(target=misc, args=(args.host, args.port, prefix, basic, fields, args.interval, debug)).start()
+        if debug:
+            print("nic={}".format(netiface))
+
+        try:
+            psutil.net_io_counters(True)[netiface]
+        except KeyError:
+            print("ERROR: Unknown network interface!")
+            return
+
+        return netiface
+
+    if isWindows:
+        import win32serviceutil
+        import win32service
+        import win32event
+        import servicemanager
+
+        class StatsdAgentService(win32serviceutil.ServiceFramework):
+            _svc_name_ = "StatsdAgent"
+            _svc_display_name_ = "Statsd Agent Service"
+
+            def __init__(self, args):
+                win32serviceutil.ServiceFramework.__init__(self, args)
+                self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+
+            def SvcStop(self):
+                self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+                win32event.SetEvent(self.hWaitStop)
+
+            def SvcDoRun(self):
+                servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
+                                      servicemanager.PYS_SERVICE_STARTED,
+                                      (self._svc_name_, ''))
+                self.main()
+
+            def main(self):
+                config = RawConfigParser(allow_no_value=True)
+                config.read('statsd-agent.cfg')
+                fields = get_fields()
+                nic = get_nic(get('nic', 'Ethernet 2'))
+                interval, rc = get_int('interval', 10), None
+
+                while rc != win32event.WAIT_OBJECT_0:
+                    run_once(get('host', 'localhost'), get_int('port', 8125), get('prefix', 'system'),
+                             fields, nic, get_boolean('debug', False))
+
+                    rc = win32event.WaitForSingleObject(self.hWaitStop, interval * 1000)
+
+        win32serviceutil.HandleCommandLine(StatsdAgentService)
+
+    else:
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--host', '-t', type=str, default=get('host', 'localhost'),
+                            help='Hostname or IP of statsd/statsite server.')
+        parser.add_argument('--port', '-p', type=int, default=get_int('port', 8125),
+                            help='UDP port number of statsd/statsite server.')
+        parser.add_argument('--prefix', '-x', type=str, default=get('prefix'),
+                            help='Prefix value to add to each measurement.')
+        parser.add_argument('--field', '-f', action='append', default=[],
+                            help="One or more 'key=value' fields to add to each measurement.")
+        parser.add_argument('--network', '--nic', '-n', type=str,
+                            default=get('nic'), help='NIC to measure.')
+        parser.add_argument('--interval', '-i', type=int, default=get_int('interval', 10),
+                            help='Time in seconds between measurements. Must be > 2.')
+        parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
+        parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
+        args = parser.parse_args()
+
+        debug = get_boolean('debug') or args.debug
+        prefix = args.prefix if args.prefix else ''
+
+        if debug:
+            print("host={}:{}".format(args.host, args.port))
+            print("prefix={}".format(prefix))
+
+        fields = get_fields(args.field, args.add_host_field)
+
+        if debug:
+            print("fields: {}".format(fields))
+
+        if fields:
+            fields = ',' + fields
+
+        if args.interval < 3:
+            print("ERROR: Invalid interval (< 3sec).")
+            return 1
+
+        nic = get_nic(args.network)
+        if not nic:
+            print("ERROR: Could not locate 10.x.x.x network interface!")
+            return 1
+
+        while True:
+            run_once(args.host, args.port, prefix, fields, nic, debug)
+            time.sleep(args.interval)
+
+        return 0
+
+if __name__ == '__main__':
+    sys.exit(main())
