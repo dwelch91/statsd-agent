@@ -19,6 +19,18 @@ python statsd-agent.py
 ```
 You can use any daemon tools to make it run as service/background. One of an example is [Supervisor](http://supervisord.org/).
 
+## Installation (Windows)
+1. Grab the `statsd-agent-sfx.exe` file. 
+2. Run it. 
+3. When prompted for the output path, enter `C:\statsd-agent`.
+4. Open `cmd.exe`
+5. `cd statsd-agent`
+6. Edit the `statsd-agent.cfg` file and set the `host=` and `service=` options (at least).
+7. Run `statsd-agent.exe install`
+8. Open the Windows Services control panel.
+9. Change the statsd agent service setting for startup to automatic.
+10. Start the service.
+
 ## Running/Stopping (Ubuntu)
 Use upstart command to run/stop statsd-agent:
 ```
