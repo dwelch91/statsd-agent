@@ -12,7 +12,7 @@ First, download both *statsd-agent.py* and *statsd-agent.conf*. Create a directo
 service statsd-agent start
 ```
 
-## Installation (Other Linux/Windows/Mac)
+## Installation (Other Linux/Mac)
 stasd-agent.py is really just a single python file. You can run it directly using python command:
 ```
 python statsd-agent.py
@@ -28,6 +28,20 @@ service statsd-agent restart
 service statsd-agent status
 ```
 More info about Ubuntu Upstart can be found at http://askubuntu.com/questions/19320/how-to-enable-or-disable-services
+
+
+## Windows Build
+
+1. Install Python2.7 (into the default `C:\Python27` dir)
+2. Install psutil 
+3. Install statsd
+4. Install py2exe
+5. Install git
+6. In `C:\User\Administrator`:
+7. `git clone https://github.com/sdvicorp/statsd-agent.git`
+8. `cd statsd-agent`
+9. `python setup.py`
+10. `iexpress /N statsd-agent.SED`. Will produce `statsd-agent-sfx.exe` in `C:\User\Administrator`
 
 License
 ============
