@@ -10,7 +10,6 @@ if len(sys.argv) == 1:
 class Target:
     def __init__(self, **kw):
         self.__dict__.update(kw)
-        # for the versioninfo resources
         self.version = "0.1.0"
         self.company_name = "SDVI"
         self.copyright = "(c) 2016 SDVI Corp."
@@ -25,20 +24,17 @@ statsd_agent = Target(
     )
 
 excludes = ["pywin", "pywin.debugger", "pywin.debugger.dbgcon",
-            "pywin.dialogs", "pywin.dialogs.list"]
+            "pywin.dialogs", "pywin.dialogs.list", 'Carbon', 'Carbon.Files', 'ElementC14N', '_psutil_linux',
+            '_sysconfigdata', 'configparser', 'enum', 'psutil._psutil_bsd', 'psutil._psutil_osx',
+            'psutil._psutil_posix', 'psutil._psutil_sunos', 'winreg']
 
 setup(
-    options={"py2exe": {
-                          # create a compressed zip archive
+    options={"py2exe": { # create a compressed zip archive
                           "compressed": 1,
                           "optimize": 2,
                           "excludes": excludes}},
     # The lib directory contains everything except the executables and the python dll.
     # Can include a subdirectory name.
     zipfile="lib/shared.zip",
-
     service=[statsd_agent],
-    #com_server = [interp],
-    #console = [test_wx_console, test_wmi],
-    #windows = [test_wx],
-    )
+)

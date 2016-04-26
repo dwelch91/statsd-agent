@@ -218,7 +218,10 @@ class StatsdConfig(RawConfigParser):
         if self.get_boolean('add-host-field', False) or arg_add_host_field and 'host' not in field_set:
             fields.append("host={}".format(socket.gethostname()))
 
-        return ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
+        fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
+        if fields and not fields.endswith(','):
+            fields = ',' + fields
+        return fields
 
 
 def get_nic(netiface):
@@ -271,11 +274,17 @@ if isWindows:
         def SvcDoRun(self):
             self.log("Starting...")
             self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
+            cfg_file = 'C:\\statsd-agent\\statsd-agent.cfg'
+            if not os.path.exists(cfg_file):
+                servicemanager.LogErrorMsg('ERROR: Could not read config file at {}.'.format(cfg_file))
+                self.ReportServiceStatus(win32service.SERVICE_ERROR_CRITICAL)
+                self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+                return
             config = StatsdConfig(allow_no_value=True)
-            config.read('statsd-agent.cfg')
+            config.read(cfg_file)
             fields = config.get_fields()
             nic = get_nic(config.get_str('nic', 'Ethernet 2'))
-            interval, rc = config.get_int('interval', 10), None
+            interval, rc = config.get_int('interval', 10) - 2, None
             host = config.get_str('host', 'localhost')
             port = config.get_int('port', 8125)
             prefix = config.get_str('prefix', 'system')
@@ -291,7 +300,7 @@ if isWindows:
 
                 rc = win32event.WaitForSingleObject(self.hWaitStop, interval * 1000)
 
-            self.log("Stopped...")
+            self.log("Stopped.")
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
@@ -332,9 +341,6 @@ def main():
         if debug:
             print("fields: {}".format(fields))
 
-        if fields:
-            fields = ',' + fields
-
         if args.interval < 3:
             print("ERROR: Invalid interval (< 3sec).")
             return 1
@@ -347,7 +353,7 @@ def main():
         try:
             while True:
                 run_once(args.host, args.port, prefix, fields, nic, debug)
-                time.sleep(args.interval)
+                time.sleep(args.interval - 2)
         except KeyboardInterrupt:
             pass
 
