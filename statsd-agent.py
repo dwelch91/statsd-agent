@@ -4,6 +4,7 @@ import time
 import socket
 import os
 import sys
+import traceback
 
 try:
     from ConfigParser import RawConfigParser, Error
@@ -168,26 +169,23 @@ def run_once(host, port, prefix, fields, nic, debug=False):
     disk(host, port, prefix, fields, debug)
 
 
-def main():
-    config = RawConfigParser(allow_no_value=True)
-    config.read('statsd-agent.cfg')
-
-    def get(opt, default=''):
+class StatsdConfig(RawConfigParser):
+    def get_str(self, opt, default=''):
         try:
-            return config.get('statsd-agent', opt)
+            return self.get('statsd-agent', opt)
         except Error:
             return default
 
-    def get_int(opt, default=0):
-        return to_int(get(opt), default)
+    def get_int(self, opt, default=0):
+        return to_int(self.get_str(opt), default)
 
-    def get_boolean(opt, default=False):
+    def get_boolean(self, opt, default=False):
         try:
-            return config.getboolean('statsd-agent', opt)
+            return self.getboolean('statsd-agent', opt)
         except Error:
             return default
 
-    def get_fields(arg_fields=None, arg_add_host_field=True):
+    def get_fields(self, arg_fields=None, arg_add_host_field=True):
         if arg_fields is None:
             arg_fields = []
 
@@ -200,13 +198,13 @@ def main():
                 field_set.add(name)
 
         try:
-            cfg_fields = config.options('fields')
+            cfg_fields = self.options('fields')
         except Error:
             cfg_fields = []
 
         for option in cfg_fields:
             try:
-                value = config.get('fields', option)
+                value = self.get('fields', option)
             except Error:
                 continue
             if '<insert service' in value:
@@ -217,102 +215,119 @@ def main():
                 fields.append("{}={}".format(option, value))
                 field_set.add(option)
 
-        if get_boolean('add-host-field', False) or arg_add_host_field and 'host' not in field_set:
+        if self.get_boolean('add-host-field', False) or arg_add_host_field and 'host' not in field_set:
             fields.append("host={}".format(socket.gethostname()))
 
         return ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
 
-    def get_nic(netiface):
-        if not netiface:
-            found = False
-            nics = psutil.net_if_addrs()
-            for n, info in nics.items():
-                for addr in info:
-                    if addr.family == socket.AF_INET and addr.address.startswith('10.'):
-                        netiface = n
-                        found = True
-                        break
-                if found:
+
+def get_nic(netiface):
+    if not netiface:
+        found = False
+        nics = psutil.net_if_addrs()
+        for n, info in nics.items():
+            for addr in info:
+                if addr.family == socket.AF_INET and addr.address.startswith('10.'):
+                    netiface = n
+                    found = True
                     break
-            else:
-                return
-
-        if debug:
-            print("nic={}".format(netiface))
-
-        try:
-            psutil.net_io_counters(True)[netiface]
-        except KeyError:
-            print("ERROR: Unknown network interface!")
+            if found:
+                break
+        else:
             return
 
-        return netiface
+    try:
+        psutil.net_io_counters(True)[netiface]
+    except KeyError:
+        print("ERROR: Unknown network interface!")
+        return
 
+    return netiface
+
+
+if isWindows:
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+
+
+    class StatsdAgentService(win32serviceutil.ServiceFramework):
+        _svc_name_ = "StatsdAgent"
+        _svc_display_name_ = "Statsd Agent Service"
+        _svc_deps_ = ["EventLog"]
+
+        def __init__(self, args):
+            win32serviceutil.ServiceFramework.__init__(self, args)
+            self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
+
+        def SvcStop(self):
+            self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
+            win32event.SetEvent(self.hWaitStop)
+
+        def log(self, msg):
+            servicemanager.LogInfoMsg(str(msg))
+
+        def SvcDoRun(self):
+            self.log("Starting...")
+            self.ReportServiceStatus(win32service.SERVICE_START_PENDING)
+            config = StatsdConfig(allow_no_value=True)
+            config.read('statsd-agent.cfg')
+            fields = config.get_fields()
+            nic = get_nic(config.get_str('nic', 'Ethernet 2'))
+            interval, rc = config.get_int('interval', 10), None
+            host = config.get_str('host', 'localhost')
+            port = config.get_int('port', 8125)
+            prefix = config.get_str('prefix', 'system')
+            debug = config.get_boolean('debug', False)
+
+            self.ReportServiceStatus(win32service.SERVICE_RUNNING)
+
+            while rc != win32event.WAIT_OBJECT_0:
+                try:
+                    run_once(host, port, prefix, fields, nic, debug)
+                except:
+                    servicemanager.LogErrorMsg(traceback.format_exc())
+
+                rc = win32event.WaitForSingleObject(self.hWaitStop, interval * 1000)
+
+            self.log("Stopped...")
+            self.ReportServiceStatus(win32service.SERVICE_STOPPED)
+
+
+def main():
     if isWindows:
-        import win32serviceutil
-        import win32service
-        import win32event
-        import servicemanager
-
-        class StatsdAgentService(win32serviceutil.ServiceFramework):
-            _svc_name_ = "StatsdAgent"
-            _svc_display_name_ = "Statsd Agent Service"
-
-            def __init__(self, args):
-                win32serviceutil.ServiceFramework.__init__(self, args)
-                self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
-
-            def SvcStop(self):
-                self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-                win32event.SetEvent(self.hWaitStop)
-
-            def SvcDoRun(self):
-                servicemanager.LogMsg(servicemanager.EVENTLOG_INFORMATION_TYPE,
-                                      servicemanager.PYS_SERVICE_STARTED,
-                                      (self._svc_name_, ''))
-                self.main()
-
-            def main(self):
-                config = RawConfigParser(allow_no_value=True)
-                config.read('statsd-agent.cfg')
-                fields = get_fields()
-                nic = get_nic(get('nic', 'Ethernet 2'))
-                interval, rc = get_int('interval', 10), None
-
-                while rc != win32event.WAIT_OBJECT_0:
-                    run_once(get('host', 'localhost'), get_int('port', 8125), get('prefix', 'system'),
-                             fields, nic, get_boolean('debug', False))
-
-                    rc = win32event.WaitForSingleObject(self.hWaitStop, interval * 1000)
-
         win32serviceutil.HandleCommandLine(StatsdAgentService)
 
     else:
+        config = StatsdConfig(allow_no_value=True)
+        config.read('statsd-agent.cfg')
+
         parser = argparse.ArgumentParser()
-        parser.add_argument('--host', '-t', type=str, default=get('host', 'localhost'),
+        parser.add_argument('--host', '-t', type=str, default=config.get_str('host', 'localhost'),
                             help='Hostname or IP of statsd/statsite server.')
-        parser.add_argument('--port', '-p', type=int, default=get_int('port', 8125),
+        parser.add_argument('--port', '-p', type=int, default=config.get_int('port', 8125),
                             help='UDP port number of statsd/statsite server.')
-        parser.add_argument('--prefix', '-x', type=str, default=get('prefix'),
+        parser.add_argument('--prefix', '-x', type=str, default=config.get_str('prefix'),
                             help='Prefix value to add to each measurement.')
         parser.add_argument('--field', '-f', action='append', default=[],
                             help="One or more 'key=value' fields to add to each measurement.")
         parser.add_argument('--network', '--nic', '-n', type=str,
-                            default=get('nic'), help='NIC to measure.')
-        parser.add_argument('--interval', '-i', type=int, default=get_int('interval', 10),
+                            default=config.get_str('nic'), help='NIC to measure.')
+        parser.add_argument('--interval', '-i', type=int, default=config.get_int('interval', 10),
                             help='Time in seconds between measurements. Must be > 2.')
         parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
         parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
         args = parser.parse_args()
 
-        debug = get_boolean('debug') or args.debug
+        debug = config.get_boolean('debug') or args.debug
         prefix = args.prefix if args.prefix else ''
 
         if debug:
             print("host={}:{}".format(args.host, args.port))
             print("prefix={}".format(prefix))
 
-        fields = get_fields(args.field, args.add_host_field)
+        fields = config.get_fields(args.field, args.add_host_field)
 
         if debug:
             print("fields: {}".format(fields))
@@ -329,9 +344,12 @@ def main():
             print("ERROR: Could not locate 10.x.x.x network interface!")
             return 1
 
-        while True:
-            run_once(args.host, args.port, prefix, fields, nic, debug)
-            time.sleep(args.interval)
+        try:
+            while True:
+                run_once(args.host, args.port, prefix, fields, nic, debug)
+                time.sleep(args.interval)
+        except KeyboardInterrupt:
+            pass
 
         return 0
 
