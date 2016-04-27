@@ -6,7 +6,7 @@ Statsd client to monitor CPU, Memory, Disk and Network
 Quickstart
 ============
 
-## Installation (Ubuntu)
+## Installation (Ubuntu) [see below]
 First, download both *statsd-agent.py* and *statsd-agent.conf*. Create a directory `/opt/statsd-agent` and place *statsd-agent.py* in it. Place the Upstart configuration file *statsd-agent.conf* in `/etc/init/`. The statsd-agent.py will automatically start as service on system startup or you can manually start it using the following command:
 ```
 service statsd-agent start
@@ -17,7 +17,23 @@ stasd-agent.py is really just a single python file. You can run it directly usin
 ```
 python statsd-agent.py
 ```
-You can use any daemon tools to make it run as service/background. One of an example is [Supervisor](http://supervisord.org/).
+
+### Full install procedure (Linux):
+1. `sudo apt-get update`
+2. `sudo apt-get install python-dev git`
+3. `git clone https://github.com/sdvicorp/statsd-agent.git`
+4. `git checkout cfg`
+5. `sudo mkdir /opt/statsd-agent`
+6. `sudo cp statsd-agent.py /opt/statsd-agent`
+7. `sudo cp statsd-agent.cfg /opt/statsd-agent`
+8. `sudo cp statsd-agent.conf /etc/init`
+9. `sudo nano /opt/statsd-agent/statsd-agent.cfg`
+10. Change fields and other options as necessary
+11. `sudo pip install psutil statsd`
+12. `sudo service statsd-agent start`
+13. `cd ~`
+14. `rm -rf statsd-agent`
+
 
 ## Installation (Windows)
 1. Grab the `statsd-agent-sfx.exe` file. 
@@ -52,8 +68,9 @@ More info about Ubuntu Upstart can be found at http://askubuntu.com/questions/19
 6. In `C:\User\Administrator`:
 7. `git clone https://github.com/sdvicorp/statsd-agent.git`
 8. `cd statsd-agent`
-9. `python setup.py`
-10. `iexpress /N statsd-agent.SED`. Will produce `statsd-agent-sfx.exe` in `C:\User\Administrator`
+9. `git checkout cfg`
+10. `python setup.py`
+11. `iexpress /N statsd-agent.SED`. Will produce `statsd-agent-sfx.exe` in `C:\User\Administrator`
 
 License
 ============

@@ -249,9 +249,13 @@ def get_nic(netiface):
 
 
 if isWindows:
+    # noinspection PyUnresolvedReferences
     import win32serviceutil
+    # noinspection PyUnresolvedReferences
     import win32service
+    # noinspection PyUnresolvedReferences
     import win32event
+    # noinspection PyUnresolvedReferences
     import servicemanager
 
 
@@ -283,7 +287,7 @@ if isWindows:
             config = StatsdConfig(allow_no_value=True)
             config.read(cfg_file)
             fields = config.get_fields()
-            nic = get_nic(config.get_str('nic', 'Ethernet 2'))
+            nic = get_nic(config.get_str('nic'))
             interval, rc = config.get_int('interval', 10) - 2, None
             host = config.get_str('host', 'localhost')
             port = config.get_int('port', 8125)
