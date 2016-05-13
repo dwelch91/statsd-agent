@@ -247,7 +247,7 @@ def run_docker(address, interval, host, port, debug=False):
                     log.debug("{}: Tx: {} -> {} ({}B/s)".format(name, tx_bytes, prev_tx_bytes, tx_rate))
                     log.debug("{}: Rx: {} -> {} ({}B/s)".format(name, rx_bytes, prev_rx_bytes, rx_rate))
 
-                pipe.guage('system.disk.root.percent,service={}'.format(name), 0)
+                pipe.gauge('system.disk.root.percent,service={}'.format(name), 0)
 
         elapsed = time.time() - start
         log.debug("docker: {}ms".format(int(elapsed * 1000)))
