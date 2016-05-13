@@ -200,7 +200,11 @@ def run_docker(address, interval, host, port, debug=False):
                 id_ = container.get('Id')
                 log.debug("{}: {}".format(name, status))
                 stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
-                pipe.gauge('system.memory.virtual.percent,service={}'.format(name), stats.get('memory_stats', {}).get('usage', 0))
+
+                mem_usage = stats.get('memory_stats', {}).get('usage', 0)
+                mem_limit = stats.get('memory_stats', {}).get('limit', 1)
+                mem_percent = 100.0 * (mem_usage / mem_limit) if mem_limit > 0 else 0
+                pipe.gauge('system.memory.virtual.percent,service={}'.format(name), mem_percent)
 
                 # http://stackoverflow.com/questions/30271942/get-docker-container-cpu-usage-as-percentage
                 cpu_percent = 0
