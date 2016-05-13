@@ -345,7 +345,7 @@ def main():
         parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
         parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
         parser.add_argument('--docker', '-d', action='store_true', help="Enable docker")
-        parser.add_argument('--docker-addr', '-a', type=str, default=config.get_str('address', 'docker',
+        parser.add_argument('--docker-addr', '-D', type=str, default=config.get_str('address', 'docker',
                                                                                     default='/var/run/docker.sock'))
         args = parser.parse_args()
 
