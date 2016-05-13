@@ -198,7 +198,7 @@ def run_docker(address, interval, host, port, debug=False):
                 name = container.get('Names')[0].strip('/')
                 status = container.get('Status')
                 id_ = container.get('Id')
-                log.debug("Container: id={}, name={}, status={}".format(id_, name, status))
+                log.debug("{}: {}".format(name, status))
                 stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
                 pipe.gauge('system.memory.virtual.percent,service={}'.format(name), stats.get('memory_stats', {}).get('usage', 0))
 
@@ -216,6 +216,9 @@ def run_docker(address, interval, host, port, debug=False):
                 if system_delta > 0 and cpu_delta > 0:
                     cpu_percent = (cpu_delta / system_delta) * len(cpu_list) * 100.0
 
+                if debug:
+                    log.debug("{}: Cpu: {}, {} {}%".format(name, cpu_delta, system_delta, cpu_percent))
+
                 prev_cpu, prev_system = total_usage, system_usage
 
                 pipe.gauge('system.cpu.percent,service={}'.format(name), cpu_percent)
@@ -223,18 +226,26 @@ def run_docker(address, interval, host, port, debug=False):
                 tx_bytes = stats.get('networks', {}).get('eth0', {}).get('tx_bytes', 0)
                 rx_bytes = stats.get('networks', {}).get('eth0', {}).get('rx_bytes', 0)
 
-                timer = time.time()
                 tx = tx_bytes - prev_tx_bytes  # B
                 rx = rx_bytes - prev_rx_bytes
+
                 prev_tx_bytes = tx_bytes
                 prev_rx_bytes = rx_bytes
+
+                timer = time.time()
                 elapsed = timer - prev_timer  # s
+                prev_timer = timer
+
                 tx_rate = tx / elapsed  # B/s
                 rx_rate = rx / elapsed
-                prev_timer = timer
+
 
                 pipe.gauge('system.network.send_rate,service={}'.format(name), tx_rate)
                 pipe.gauge('system.network.recv_rate,service={}'.format(name), rx_rate)
+
+                if debug:
+                    log.debug("{}: Tx: {} -> {} ({}B/s)".format(name, tx_bytes, prev_tx_bytes, tx_rate))
+                    log.debug("{}: Rx: {} -> {} ({}B/s)".format(name, rx_bytes, prev_rx_bytes, rx_rate))
 
                 pipe.guage('system.disk.root.percent,service={}'.format(name), 0)
 
