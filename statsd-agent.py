@@ -228,7 +228,7 @@ class StatsdConfig(RawConfigParser):
                 fields.append("{}={}".format(option, value))
                 field_set.add(option)
 
-        if self.get_boolean('add-host-field', False) or arg_add_host_field and 'host' not in field_set:
+        if self.get_boolean('add-host-field', default=False) or arg_add_host_field and 'host' not in field_set:
             fields.append("host={}".format(socket.gethostname()))
 
         fields = ','.join([f.replace(',', '_').replace(' ', '_').replace('.', '-') for f in fields])
@@ -349,8 +349,8 @@ def main():
                                                                                     default='/var/run/docker.sock'))
         args = parser.parse_args()
 
-        docker = config.get_boolean('enabled', 'docker') or args.docker
-        debug = config.get_boolean('debug') or args.debug
+        docker = config.get_boolean('enabled', 'docker', default=False) or args.docker
+        debug = config.get_boolean('debug', default=False) or args.debug
         prefix = args.prefix if args.prefix else ''
 
         if debug:
@@ -373,11 +373,11 @@ def main():
 
         try:
             while True:
-                start = time()
+                start = time.time()
                 run_once(args.host, args.port, prefix, fields, nic, debug)
                 if docker:
                     run_docker(args.docker_addr)
-                elapsed = time() - start
+                elapsed = time.time() - start
                 time.sleep(args.interval - elapsed)
         except KeyboardInterrupt:
             pass
