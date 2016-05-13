@@ -186,11 +186,11 @@ def run_once(host, port, prefix, fields, nic, debug=False):
 
 
 def run_docker(address, interval, host, port, debug=False):
-    prev_tx_bytes, prev_rx_bytes, prev_timer = 0, 0, 0
+    prev_cpu, prev_system = {}, {}
+    prev_tx_bytes, prev_rx_bytes, prev_timer = {}, {}, {}
     client = statsd.StatsClient(host, port)
 
     while True:
-        prev_cpu, prev_system = 0, 0
         with client.pipeline() as pipe:
             start = time.time()
             containers = get(address, '/containers/json?all=1')
@@ -206,10 +206,10 @@ def run_docker(address, interval, host, port, debug=False):
                 cpu_percent = 0
 
                 total_usage = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('total_usage')
-                cpu_delta = total_usage - prev_cpu
+                cpu_delta = total_usage - prev_cpu.get(name, 0)
 
                 system_usage = stats.get('cpu_stats', {}).get('system_cpu_usage')
-                system_delta = system_usage - prev_system
+                system_delta = system_usage - prev_system.get(name, 0)
 
                 cpu_list = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('percpu_usage')
 
@@ -219,26 +219,25 @@ def run_docker(address, interval, host, port, debug=False):
                 if debug:
                     log.debug("{}: Cpu: {}, {}: {}%".format(name, cpu_delta, system_delta, cpu_percent))
 
-                prev_cpu, prev_system = total_usage, system_usage
+                prev_cpu[name], prev_system[name] = total_usage, system_usage
 
                 pipe.gauge('system.cpu.percent,service={}'.format(name), cpu_percent)
 
                 tx_bytes = stats.get('networks', {}).get('eth0', {}).get('tx_bytes', 0)
                 rx_bytes = stats.get('networks', {}).get('eth0', {}).get('rx_bytes', 0)
 
-                tx = tx_bytes - prev_tx_bytes  # B
-                rx = rx_bytes - prev_rx_bytes
+                tx = tx_bytes - prev_tx_bytes.get(name, 0)  # B
+                rx = rx_bytes - prev_rx_bytes.get(name, 0)
 
-                prev_tx_bytes = tx_bytes
-                prev_rx_bytes = rx_bytes
+                prev_tx_bytes[name] = tx_bytes
+                prev_rx_bytes[name] = rx_bytes
 
                 timer = time.time()
-                elapsed = timer - prev_timer  # s
-                prev_timer = timer
+                elapsed = timer - prev_timer.get(name, 0)  # s
+                prev_timer[name] = timer
 
-                tx_rate = tx / elapsed  # B/s
-                rx_rate = rx / elapsed
-
+                tx_rate = tx / elapsed if tx > 0 and elapsed > 0 else 0  # B/s
+                rx_rate = rx / elapsed if rx > 0 and elapsed > 0 else 0
 
                 pipe.gauge('system.network.send_rate,service={}'.format(name), tx_rate)
                 pipe.gauge('system.network.recv_rate,service={}'.format(name), rx_rate)
