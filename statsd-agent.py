@@ -6,6 +6,7 @@ import os
 import sys
 import traceback
 import logging
+from logging.handlers import SysLogHandler
 import json
 
 try:
@@ -21,7 +22,7 @@ import statsd
 log = logging.getLogger('statsd-agent')
 log.setLevel(logging.DEBUG)
 
-handler = logging.handlers.SysLogHandler(address='/dev/log')
+handler = SysLogHandler(address='/dev/log')
 log.addHandler(handler)
 
 system = platform.system()
