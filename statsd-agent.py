@@ -184,24 +184,105 @@ def run_once(host, port, prefix, fields, nic, debug=False):
     disk(host, port, prefix, fields, debug)
 
 
-def run_docker(address, interval):
+def run_docker(address, interval, host, port, debug=False):
+    client = statsd.StatsClient(host, port)
+
     while True:
-        start = time.time()
-        containers = get(address, '/containers/json?all=1')
-        for container in containers:
-            name = container.get('Names')[0].strip('/')
-            status = container.get('Status')
-            id_ = container.get('Id')
-            log.debug("Container: id={}, name={}, status={}".format(id_, name, status))
-            stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
-            #print(stats)
-            #data = json.loads(stats.encode('utf-8'))
-            import pprint
-            pprint.pprint(stats)
+        with client.pipeline() as pipe:
+            start = time.time()
+            containers = get(address, '/containers/json?all=1')
+            for container in containers:
+                name = container.get('Names')[0].strip('/')
+                status = container.get('Status')
+                id_ = container.get('Id')
+                log.debug("Container: id={}, name={}, status={}".format(id_, name, status))
+                stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
+                pipe.gauge('system.memory.virtual.percent,service={}'.format(name), stats.get('memory_stats', {}).get('usage', 0))
+                system_usage = stats.get('cpu_stats', {}).get('system_cpu_usage')
+                total_usage = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('total_usage')
+                pipe.gauge('system.cpu.percent,service={}'.format(name), total_usage / system_usage * 100)
+                pipe.gauge('system.network.send_rate,service={}'.format(name), 0)
+                pipe.gauge('system.network.recv_rate,service={}'.format(name), 0)
 
         elapsed = time.time() - start
         log.debug("docker: {}ms".format(int(elapsed * 1000)))
         time.sleep(interval - elapsed)
+
+"""
+{u'blkio_stats': {u'io_merged_recursive': [],
+                  u'io_queue_recursive': [],
+                  u'io_service_bytes_recursive': [],
+                  u'io_service_time_recursive': [],
+                  u'io_serviced_recursive': [],
+                  u'io_time_recursive': [],
+                  u'io_wait_time_recursive': [],
+                  u'sectors_recursive': []},
+ u'cpu_stats': {u'cpu_usage': {u'percpu_usage': [83844256920,
+                                                 157753286806,
+                                                 39217669843,
+                                                 45146065908],
+                               u'total_usage': 325961279477,
+                               u'usage_in_kernelmode': 7120000000,
+                               u'usage_in_usermode': 133300000000},
+                u'system_cpu_usage': 11711555710000000,
+                u'throttling_data': {u'periods': 0,
+                                     u'throttled_periods': 0,
+                                     u'throttled_time': 0}},
+ u'memory_stats': {u'failcnt': 0,
+                   u'limit': 16827494400,
+                   u'max_usage': 234786816,
+                   u'stats': {u'active_anon': 231514112,
+                              u'active_file': 688128,
+                              u'cache': 1343488,
+                              u'hierarchical_memory_limit': 18446744073709551615L,
+                              u'inactive_anon': 8192,
+                              u'inactive_file': 479232,
+                              u'mapped_file': 0,
+                              u'pgfault': 267536,
+                              u'pgmajfault': 0,
+                              u'pgpgin': 194462,
+                              u'pgpgout': 189264,
+                              u'rss': 231346176,
+                              u'rss_huge': 73400320,
+                              u'total_active_anon': 231514112,
+                              u'total_active_file': 688128,
+                              u'total_cache': 1343488,
+                              u'total_inactive_anon': 8192,
+                              u'total_inactive_file': 479232,
+                              u'total_mapped_file': 0,
+                              u'total_pgfault': 267536,
+                              u'total_pgmajfault': 0,
+                              u'total_pgpgin': 194462,
+                              u'total_pgpgout': 189264,
+                              u'total_rss': 231346176,
+                              u'total_rss_huge': 73400320,
+                              u'total_unevictable': 0,
+                              u'total_writeback': 0,
+                              u'unevictable': 0,
+                              u'writeback': 0},
+                   u'usage': 232689664},
+ u'networks': {u'eth0': {u'rx_bytes': 634380811,
+                         u'rx_dropped': 0,
+                         u'rx_errors': 0,
+                         u'rx_packets': 631815,
+                         u'tx_bytes': 245213181,
+                         u'tx_dropped': 0,
+                         u'tx_errors': 0,
+                         u'tx_packets': 425412}},
+ u'pids_stats': {},
+ u'precpu_stats': {u'cpu_usage': {u'percpu_usage': [83838983391,
+                                                    157750711169,
+                                                    39217575843,
+                                                    45143025844],
+                                  u'total_usage': 325950296247,
+                                  u'usage_in_kernelmode': 7120000000,
+                                  u'usage_in_usermode': 133300000000},
+                   u'system_cpu_usage': 11711551740000000,
+                   u'throttling_data': {u'periods': 0,
+                                        u'throttled_periods': 0,
+                                        u'throttled_time': 0}},
+ u'read': u'2016-05-13T02:31:43.077577862Z'}
+ """
 
 
 class StatsdConfig(RawConfigParser):
@@ -402,7 +483,8 @@ def main():
             return 1
 
         if docker:
-            multiprocessing.Process(target=run_docker, args=(args.docker_addr, args.docker_interval)).start()
+            multiprocessing.Process(target=run_docker,
+                                    args=(args.docker_addr, args.docker_interval, args.host, args.port)).start()
 
         try:
             while True:
