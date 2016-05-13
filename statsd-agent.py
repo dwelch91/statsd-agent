@@ -217,7 +217,7 @@ def run_docker(address, interval, host, port, debug=False):
                     cpu_percent = (cpu_delta / system_delta) * len(cpu_list) * 100.0
 
                 if debug:
-                    log.debug("{}: Cpu: {}, {} {}%".format(name, cpu_delta, system_delta, cpu_percent))
+                    log.debug("{}: Cpu: {}, {}: {}%".format(name, cpu_delta, system_delta, cpu_percent))
 
                 prev_cpu, prev_system = total_usage, system_usage
 
@@ -620,7 +620,7 @@ def main():
 
         if docker:
             multiprocessing.Process(target=run_docker,
-                                    args=(args.docker_addr, args.docker_interval, args.host, args.port)).start()
+                                    args=(args.docker_addr, args.docker_interval, args.host, args.port, debug)).start()
 
         try:
             while True:
