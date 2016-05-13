@@ -243,8 +243,8 @@ def run_docker(address, interval, host, port, debug=False):
                 pipe.gauge('system.network.recv_rate,service={}'.format(name), rx_rate)
 
                 if debug:
-                    log.debug("{}: Tx: {} -> {} ({}B/s)".format(name, tx_bytes, prev_tx_bytes, tx_rate))
-                    log.debug("{}: Rx: {} -> {} ({}B/s)".format(name, rx_bytes, prev_rx_bytes, rx_rate))
+                    log.debug("{}: Tx: {} -> {} ({}B/s)".format(name, tx_bytes, prev_tx_bytes[name], tx_rate))
+                    log.debug("{}: Rx: {} -> {} ({}B/s)".format(name, rx_bytes, prev_rx_bytes[name], rx_rate))
 
                 pipe.gauge('system.disk.root.percent,service={}'.format(name), 0)
 
