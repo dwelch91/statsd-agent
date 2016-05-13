@@ -188,6 +188,7 @@ def run_docker(address, interval, host, port, debug=False):
     client = statsd.StatsClient(host, port)
 
     while True:
+        prev_cpu, prev_system = 0, 0
         with client.pipeline() as pipe:
             start = time.time()
             containers = get(address, '/containers/json?all=1')
@@ -198,9 +199,24 @@ def run_docker(address, interval, host, port, debug=False):
                 log.debug("Container: id={}, name={}, status={}".format(id_, name, status))
                 stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
                 pipe.gauge('system.memory.virtual.percent,service={}'.format(name), stats.get('memory_stats', {}).get('usage', 0))
-                system_usage = stats.get('cpu_stats', {}).get('system_cpu_usage')
+
+                cpu_percent = 0
+
                 total_usage = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('total_usage')
-                pipe.gauge('system.cpu.percent,service={}'.format(name), total_usage / system_usage * 100)
+                cpu_delta = total_usage - prev_cpu
+
+                system_usage = stats.get('cpu_stats', {}).get('system_cpu_usage')
+                system_delta = system_usage - prev_system
+
+                cpu_list = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('percpu_usage')
+
+                if system_delta > 0 and cpu_delta > 0:
+                    cpu_percent = (cpu_delta / system_delta) * len(cpu_list)
+
+                prev_cpu, prev_system = total_usage, system_usage
+
+                pipe.gauge('system.cpu.percent,service={}'.format(name), cpu_percent)
+
                 pipe.gauge('system.network.send_rate,service={}'.format(name), 0)
                 pipe.gauge('system.network.recv_rate,service={}'.format(name), 0)
 
