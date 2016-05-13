@@ -172,14 +172,20 @@ def run_once(host, port, prefix, fields, nic, debug=False):
 
 
 def run_docker(address):
-    containers = get(address, '/containers/json?all=1')
-    for container in containers:
-        name = container.get('Names')[0]
-        status = container.get('Status')
-        id_ = container.get('Id')
-        print(id_, name, status)
-        stats = get(address, '/containers/{}/stats?stream=0'.format(id_))
-        print(stats)
+    while True:
+        start = time.time()
+        containers = get(address, '/containers/json?all=1')
+        for container in containers:
+            name = container.get('Names')[0]
+            status = container.get('Status')
+            id_ = container.get('Id')
+            print(id_, name, status)
+            stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
+            print(stats)
+
+        elapsed = time.time() - start
+        print(elapsed)
+        time.sleep(15 - elapsed)
 
 
 class StatsdConfig(RawConfigParser):
@@ -326,6 +332,8 @@ def main():
         win32serviceutil.HandleCommandLine(StatsdAgentService)
 
     else:
+        import multiprocessing
+
         config = StatsdConfig(allow_no_value=True)
         config.read('statsd-agent.cfg')
 
@@ -371,13 +379,17 @@ def main():
             print("ERROR: Could not locate 10.x.x.x network interface!")
             return 1
 
+        if docker:
+            multiprocessing.Process(target=run_docker, args=(args.docker_addr,)).start()
+
         try:
             while True:
                 start = time.time()
                 run_once(args.host, args.port, prefix, fields, nic, debug)
-                if docker:
-                    run_docker(args.docker_addr)
+                # if docker:
+                #     run_docker(args.docker_addr)
                 elapsed = time.time() - start
+                print(elapsed)
                 time.sleep(args.interval - elapsed)
         except KeyboardInterrupt:
             pass
