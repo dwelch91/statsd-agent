@@ -204,6 +204,10 @@ def run_docker(address, interval, host, port, debug=False):
                 mem_usage = stats.get('memory_stats', {}).get('usage', 0)
                 mem_limit = stats.get('memory_stats', {}).get('limit', 1)
                 mem_percent = 100.0 * (mem_usage / mem_limit) if mem_limit > 0 else 0
+
+                if debug:
+                    log.debug("{}: Mem: {:,} {:,} {}%".format(name, mem_usage, mem_limit, mem_percent))
+
                 pipe.gauge('system.memory.virtual.percent,service={}'.format(name), mem_percent)
 
                 # http://stackoverflow.com/questions/30271942/get-docker-container-cpu-usage-as-percentage
@@ -247,8 +251,8 @@ def run_docker(address, interval, host, port, debug=False):
                 pipe.gauge('system.network.recv_rate,service={}'.format(name), rx_rate)
 
                 if debug:
-                    log.debug("{}: Tx: {} -> {} ({}B/s)".format(name, tx_bytes, prev_tx_bytes[name], tx_rate))
-                    log.debug("{}: Rx: {} -> {} ({}B/s)".format(name, rx_bytes, prev_rx_bytes[name], rx_rate))
+                    log.debug("{}: Net Tx: {:,} -> {:,} ({}B/s)".format(name, tx_bytes, prev_tx_bytes[name], tx_rate))
+                    log.debug("{}: Net Rx: {:,} -> {:,} ({}B/s)".format(name, rx_bytes, prev_rx_bytes[name], rx_rate))
 
                 pipe.gauge('system.disk.root.percent,service={}'.format(name), 0)
 
