@@ -11,6 +11,8 @@ try:
 except ImportError:
     from configparser import RawConfigParser, Error
 
+from docker import get
+
 import psutil
 import statsd
 
@@ -169,19 +171,30 @@ def run_once(host, port, prefix, fields, nic, debug=False):
     disk(host, port, prefix, fields, debug)
 
 
+def run_docker(address):
+    containers = get(address, '/containers/json?all=1')
+    for container in containers:
+        name = container.get('Names')[0]
+        status = container.get('Status')
+        id_ = container.get('Id')
+        print(id_, name, status)
+        stats = get(address, '/containers/{}/stats?stream=0'.format(id_))
+        print(stats)
+
+
 class StatsdConfig(RawConfigParser):
-    def get_str(self, opt, default=''):
+    def get_str(self, opt, section='statsd-agent', default=''):
         try:
-            return self.get('statsd-agent', opt)
+            return self.get(section, opt)
         except Error:
             return default
 
-    def get_int(self, opt, default=0):
-        return to_int(self.get_str(opt), default)
+    def get_int(self, opt, section='statsd-agent', default=0):
+        return to_int(self.get_str(opt, section), default)
 
-    def get_boolean(self, opt, default=False):
+    def get_boolean(self, opt, section='statsd-agent', default=False):
         try:
-            return self.getboolean('statsd-agent', opt)
+            return self.getboolean(section, opt)
         except Error:
             return default
 
@@ -288,11 +301,11 @@ if isWindows:
             config.read(cfg_file)
             fields = config.get_fields()
             nic = get_nic(config.get_str('nic'))
-            interval, rc = config.get_int('interval', 10) - 2, None
-            host = config.get_str('host', 'localhost')
-            port = config.get_int('port', 8125)
-            prefix = config.get_str('prefix', 'system')
-            debug = config.get_boolean('debug', False)
+            interval, rc = config.get_int('interval', default=10) - 2, None
+            host = config.get_str('host', default='localhost')
+            port = config.get_int('port', default=8125)
+            prefix = config.get_str('prefix', default='system')
+            debug = config.get_boolean('debug', default=False)
 
             self.ReportServiceStatus(win32service.SERVICE_RUNNING)
 
@@ -317,9 +330,9 @@ def main():
         config.read('statsd-agent.cfg')
 
         parser = argparse.ArgumentParser()
-        parser.add_argument('--host', '-t', type=str, default=config.get_str('host', 'localhost'),
+        parser.add_argument('--host', '-t', type=str, default=config.get_str('host', default='localhost'),
                             help='Hostname or IP of statsd/statsite server.')
-        parser.add_argument('--port', '-p', type=int, default=config.get_int('port', 8125),
+        parser.add_argument('--port', '-p', type=int, default=config.get_int('port', default=8125),
                             help='UDP port number of statsd/statsite server.')
         parser.add_argument('--prefix', '-x', type=str, default=config.get_str('prefix'),
                             help='Prefix value to add to each measurement.')
@@ -327,12 +340,16 @@ def main():
                             help="One or more 'key=value' fields to add to each measurement.")
         parser.add_argument('--network', '--nic', '-n', type=str,
                             default=config.get_str('nic'), help='NIC to measure.')
-        parser.add_argument('--interval', '-i', type=int, default=config.get_int('interval', 10),
+        parser.add_argument('--interval', '-i', type=int, default=config.get_int('interval', default=10),
                             help='Time in seconds between measurements. Must be > 2.')
         parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
         parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
+        parser.add_argument('--docker', '-d', action='store_true', help="Enable docker")
+        parser.add_argument('--docker-addr', '-a', type=str, default=config.get_str('address', 'docker',
+                                                                                    default='/var/run/docker.sock'))
         args = parser.parse_args()
 
+        docker = config.get_boolean('enabled', 'docker') or args.docker
         debug = config.get_boolean('debug') or args.debug
         prefix = args.prefix if args.prefix else ''
 
@@ -356,8 +373,12 @@ def main():
 
         try:
             while True:
+                start = time()
                 run_once(args.host, args.port, prefix, fields, nic, debug)
-                time.sleep(args.interval - 2)
+                if docker:
+                    run_docker(args.docker_addr)
+                elapsed = time() - start
+                time.sleep(args.interval - elapsed)
         except KeyboardInterrupt:
             pass
 
