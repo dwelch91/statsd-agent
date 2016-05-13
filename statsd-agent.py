@@ -5,6 +5,8 @@ import socket
 import os
 import sys
 import traceback
+import logging
+import json
 
 try:
     from ConfigParser import RawConfigParser, Error
@@ -15,6 +17,12 @@ from docker import get
 
 import psutil
 import statsd
+
+log = logging.getLogger('statsd-agent')
+log.setLevel(logging.DEBUG)
+
+handler = logging.handlers.SysLogHandler(address='/dev/log')
+log.addHandler(handler)
 
 system = platform.system()
 isLinux = system == 'Linux'
@@ -156,7 +164,7 @@ def misc(host, port, prefix, fields, debug=False):
     with client.pipeline() as pipe:
         pipe.gauge('uptime{}'.format(fields), uptime)
         if debug:
-            print("uptime={}".format(uptime))
+            log.debug("uptime={}".format(uptime))
 
         pipe.gauge('users{}'.format(fields), len(psutil.users()))
         pipe.gauge('processes{}'.format(fields), len(psutil.pids()))
@@ -171,21 +179,24 @@ def run_once(host, port, prefix, fields, nic, debug=False):
     disk(host, port, prefix, fields, debug)
 
 
-def run_docker(address):
+def run_docker(address, interval):
     while True:
         start = time.time()
         containers = get(address, '/containers/json?all=1')
         for container in containers:
-            name = container.get('Names')[0]
+            name = container.get('Names')[0].strip('/')
             status = container.get('Status')
             id_ = container.get('Id')
-            print(id_, name, status)
+            log.debug("Container: id={}, name={}, status={}".format(id_, name, status))
             stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
-            print(stats)
+            #print(stats)
+            data = json.loads(stats)
+            import pprint
+            pprint.pprint(data)
 
         elapsed = time.time() - start
-        print(elapsed)
-        time.sleep(15 - elapsed)
+        log.debug("docker: {}ms".format(int(elapsed * 1000)))
+        time.sleep(interval - elapsed)
 
 
 class StatsdConfig(RawConfigParser):
@@ -227,7 +238,7 @@ class StatsdConfig(RawConfigParser):
             except Error:
                 continue
             if '<insert service' in value:
-                print("ERROR: Set the service type in statsd-agent.cfg")
+                log.error("Set the service type in statsd-agent.cfg")
                 continue
 
             if value and option not in field_set:
@@ -261,7 +272,7 @@ def get_nic(netiface):
     try:
         psutil.net_io_counters(True)[netiface]
     except KeyError:
-        print("ERROR: Unknown network interface!")
+        log.error("Unknown network interface!")
         return
 
     return netiface
@@ -349,47 +360,51 @@ def main():
         parser.add_argument('--network', '--nic', '-n', type=str,
                             default=config.get_str('nic'), help='NIC to measure.')
         parser.add_argument('--interval', '-i', type=int, default=config.get_int('interval', default=10),
-                            help='Time in seconds between measurements. Must be > 2.')
+                            help='Time in seconds between system measurements. Must be > 2.')
         parser.add_argument('--add-host-field', '-a', action='store_true', help='Auto add host= to fields.')
         parser.add_argument('--debug', '-g', action='store_true', help="Turn on debugging.")
         parser.add_argument('--docker', '-d', action='store_true', help="Enable docker")
         parser.add_argument('--docker-addr', '-D', type=str, default=config.get_str('address', 'docker',
                                                                                     default='/var/run/docker.sock'))
-        args = parser.parse_args()
+        parser.add_argument('--docker-interval', '-I', type=int, default=config.get_int('interval', 'docker', default=15),
+                            help='Time in seconds between docker measurements. Must be > 2.')
 
+        args = parser.parse_args()
         docker = config.get_boolean('enabled', 'docker', default=False) or args.docker
         debug = config.get_boolean('debug', default=False) or args.debug
         prefix = args.prefix if args.prefix else ''
 
         if debug:
-            print("host={}:{}".format(args.host, args.port))
-            print("prefix={}".format(prefix))
+            log.debug("host={}:{}".format(args.host, args.port))
+            log.debug("prefix={}".format(prefix))
 
         fields = config.get_fields(args.field, args.add_host_field)
 
         if debug:
-            print("fields: {}".format(fields))
+            log.debug("fields: {}".format(fields))
 
         if args.interval < 3:
-            print("ERROR: Invalid interval (< 3sec).")
+            log.error("Invalid system interval (< 3sec).")
+            return 1
+
+        if args.docker_interval < 3:
+            log.error("Invalid docker interval (< 3sec).")
             return 1
 
         nic = get_nic(args.network)
         if not nic:
-            print("ERROR: Could not locate 10.x.x.x network interface!")
+            log.error("Could not locate 10.x.x.x network interface!")
             return 1
 
         if docker:
-            multiprocessing.Process(target=run_docker, args=(args.docker_addr,)).start()
+            multiprocessing.Process(target=run_docker, args=(args.docker_addr, args.docker_interval)).start()
 
         try:
             while True:
                 start = time.time()
                 run_once(args.host, args.port, prefix, fields, nic, debug)
-                # if docker:
-                #     run_docker(args.docker_addr)
                 elapsed = time.time() - start
-                print(elapsed)
+                log.debug("statsd: {}ms".format(int(elapsed * 1000)))
                 time.sleep(args.interval - elapsed)
         except KeyboardInterrupt:
             pass
