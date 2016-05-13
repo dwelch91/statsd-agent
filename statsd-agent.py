@@ -1,3 +1,4 @@
+from __future__ import division
 import argparse
 import platform
 import time
@@ -185,6 +186,7 @@ def run_once(host, port, prefix, fields, nic, debug=False):
 
 
 def run_docker(address, interval, host, port, debug=False):
+    prev_tx_bytes, prev_rx_bytes, prev_timer = 0, 0, 0
     client = statsd.StatsClient(host, port)
 
     while True:
@@ -200,6 +202,7 @@ def run_docker(address, interval, host, port, debug=False):
                 stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
                 pipe.gauge('system.memory.virtual.percent,service={}'.format(name), stats.get('memory_stats', {}).get('usage', 0))
 
+                # http://stackoverflow.com/questions/30271942/get-docker-container-cpu-usage-as-percentage
                 cpu_percent = 0
 
                 total_usage = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('total_usage')
@@ -211,18 +214,124 @@ def run_docker(address, interval, host, port, debug=False):
                 cpu_list = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('percpu_usage')
 
                 if system_delta > 0 and cpu_delta > 0:
-                    cpu_percent = (cpu_delta / system_delta) * len(cpu_list)
+                    cpu_percent = (cpu_delta / system_delta) * len(cpu_list) * 100.0
 
                 prev_cpu, prev_system = total_usage, system_usage
 
                 pipe.gauge('system.cpu.percent,service={}'.format(name), cpu_percent)
 
-                pipe.gauge('system.network.send_rate,service={}'.format(name), 0)
-                pipe.gauge('system.network.recv_rate,service={}'.format(name), 0)
+                tx_bytes = stats.get('networks', {}).get('eth0', {}).get('tx_bytes', 0)
+                rx_bytes = stats.get('networks', {}).get('eth0', {}).get('rx_bytes', 0)
+
+                timer = time.time()
+                tx = tx_bytes - prev_tx_bytes  # B
+                rx = rx_bytes - prev_rx_bytes
+                prev_tx_bytes = tx_bytes
+                prev_rx_bytes = rx_bytes
+                elapsed = timer - prev_timer  # s
+                tx_rate = tx / elapsed  # B/s
+                rx_rate = rx / elapsed
+                prev_timer = timer
+
+                pipe.gauge('system.network.send_rate,service={}'.format(name), tx_rate)
+                pipe.gauge('system.network.recv_rate,service={}'.format(name), rx_rate)
+
+                pipe.guage('system.disk.root.percent,service={}'.format(name), 0)
 
         elapsed = time.time() - start
         log.debug("docker: {}ms".format(int(elapsed * 1000)))
         time.sleep(interval - elapsed)
+
+"""
+[{u'Command': u'/bin/sh -c /home/ubuntu/pigeon/docker/startup.sh',
+  u'Created': 1463090918,
+  u'HostConfig': {u'NetworkMode': u'default'},
+  u'Id': u'4b7ced80e94c5107357ac9fbaa59526acd57bd68e0d46e7e0d7b40ab7e748459',
+  u'Image': u'sdvi/pigeon:347',
+  u'ImageID': u'sha256:8e1c25069c55ab3c8945b31de1e03bcd73d6d825a4fb797fc615bbbb8e9d90a6',
+  u'Labels': {},
+  u'Names': [u'/pigeon'],
+  u'NetworkSettings': {u'Networks': {u'bridge': {u'Aliases': None,
+                                                 u'EndpointID': u'24f9fd4304e17fb84f54d53d8c504c3939eb2374f72621eef6f116a884bf589f',
+                                                 u'Gateway': u'172.17.0.1',
+                                                 u'GlobalIPv6Address': u'',
+                                                 u'GlobalIPv6PrefixLen': 0,
+                                                 u'IPAMConfig': None,
+                                                 u'IPAddress': u'172.17.0.3',
+                                                 u'IPPrefixLen': 16,
+                                                 u'IPv6Gateway': u'',
+                                                 u'Links': None,
+                                                 u'MacAddress': u'02:42:ac:11:00:03',
+                                                 u'NetworkID': u''}}},
+  u'Ports': [{u'IP': u'0.0.0.0',
+              u'PrivatePort': 22,
+              u'PublicPort': 8112,
+              u'Type': u'tcp'},
+             {u'IP': u'0.0.0.0',
+              u'PrivatePort': 80,
+              u'PublicPort': 8111,
+              u'Type': u'tcp'}],
+  u'Status': u'Up 5 hours'},
+ {u'Command': u'/bin/sh -c docker/startup.sh',
+  u'Created': 1463087900,
+  u'HostConfig': {u'NetworkMode': u'default'},
+  u'Id': u'e90f30bccaab532c9d74ce4753b77915d52567769df9ad2bf65b7fa005c9343e',
+  u'Image': u'sdvi/tiger:44',
+  u'ImageID': u'sha256:533fea4330f34ed91d699974aa637638a0958ebebf371f8140e42925d2b201b5',
+  u'Labels': {},
+  u'Names': [u'/tiger'],
+  u'NetworkSettings': {u'Networks': {u'bridge': {u'Aliases': None,
+                                                 u'EndpointID': u'cb5a9e0ee45249060b4e3f5b69dea322d6727e1d6126489803373fd497677223',
+                                                 u'Gateway': u'172.17.0.1',
+                                                 u'GlobalIPv6Address': u'',
+                                                 u'GlobalIPv6PrefixLen': 0,
+                                                 u'IPAMConfig': None,
+                                                 u'IPAddress': u'172.17.0.4',
+                                                 u'IPPrefixLen': 16,
+                                                 u'IPv6Gateway': u'',
+                                                 u'Links': None,
+                                                 u'MacAddress': u'02:42:ac:11:00:04',
+                                                 u'NetworkID': u''}}},
+  u'Ports': [{u'IP': u'0.0.0.0',
+              u'PrivatePort': 80,
+              u'PublicPort': 8121,
+              u'Type': u'tcp'},
+             {u'IP': u'0.0.0.0',
+              u'PrivatePort': 22,
+              u'PublicPort': 8122,
+              u'Type': u'tcp'}],
+  u'Status': u'Up 6 hours'},
+ {u'Command': u'/bin/sh -c /home/ubuntu/squirrel/docker/startup.sh',
+  u'Created': 1463069767,
+  u'HostConfig': {u'NetworkMode': u'default'},
+  u'Id': u'a0e4575be81f44641ca2c3b533cd2f0e08d790399b0b7a0c5c8f9e89e2508826',
+  u'Image': u'sdvi/squirrel:284',
+  u'ImageID': u'sha256:daa981a9333588c809ea880f21a024a1590d5d8c95b4ffadb822b8eb20b13c60',
+  u'Labels': {},
+  u'Names': [u'/squirrel'],
+  u'NetworkSettings': {u'Networks': {u'bridge': {u'Aliases': None,
+                                                 u'EndpointID': u'8d605b9ee207ee36ac74436da528349aecc9e022413ef92a978cc4ee0727dd2e',
+                                                 u'Gateway': u'172.17.0.1',
+                                                 u'GlobalIPv6Address': u'',
+                                                 u'GlobalIPv6PrefixLen': 0,
+                                                 u'IPAMConfig': None,
+                                                 u'IPAddress': u'172.17.0.2',
+                                                 u'IPPrefixLen': 16,
+                                                 u'IPv6Gateway': u'',
+                                                 u'Links': None,
+                                                 u'MacAddress': u'02:42:ac:11:00:02',
+                                                 u'NetworkID': u''}}},
+  u'Ports': [{u'IP': u'0.0.0.0',
+              u'PrivatePort': 22,
+              u'PublicPort': 8102,
+              u'Type': u'tcp'},
+             {u'IP': u'0.0.0.0',
+              u'PrivatePort': 80,
+              u'PublicPort': 8101,
+              u'Type': u'tcp'}],
+  u'Status': u'Up 11 hours'}]
+  """
+
 
 """
 {u'blkio_stats': {u'io_merged_recursive': [],
