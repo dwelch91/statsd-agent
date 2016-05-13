@@ -195,9 +195,9 @@ def run_docker(address, interval):
             log.debug("Container: id={}, name={}, status={}".format(id_, name, status))
             stats = get(address, '/containers/{}/stats?stream=0'.format(id_))  # Very slow call...
             #print(stats)
-            data = json.loads(stats.encode('utf-8'))
+            #data = json.loads(stats.encode('utf-8'))
             import pprint
-            pprint.pprint(data)
+            pprint.pprint(stats)
 
         elapsed = time.time() - start
         log.debug("docker: {}ms".format(int(elapsed * 1000)))
