@@ -8,7 +8,6 @@ import sys
 import traceback
 import logging
 from logging.handlers import SysLogHandler
-import json
 import zlib
 
 try:
@@ -237,9 +236,6 @@ def run_docker(address, interval, host, port, debug=False):
                 tx = tx_bytes - prev_tx_bytes.get(name, 0)  # B
                 rx = rx_bytes - prev_rx_bytes.get(name, 0)
 
-                prev_tx_bytes[name] = tx_bytes
-                prev_rx_bytes[name] = rx_bytes
-
                 timer = time.time()
                 elapsed = timer - prev_timer.get(name, 0)  # s
                 prev_timer[name] = timer
@@ -253,6 +249,9 @@ def run_docker(address, interval, host, port, debug=False):
                 if debug:
                     log.debug("{}: Net Tx: {:,} -> {:,} ({}B/s)".format(name, tx_bytes, prev_tx_bytes[name], tx_rate))
                     log.debug("{}: Net Rx: {:,} -> {:,} ({}B/s)".format(name, rx_bytes, prev_rx_bytes[name], rx_rate))
+
+                prev_tx_bytes[name] = tx_bytes
+                prev_rx_bytes[name] = rx_bytes
 
                 pipe.gauge('system.disk.root.percent,service={}'.format(name), 0)
 
