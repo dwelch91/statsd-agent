@@ -225,8 +225,8 @@ def run_docker(address, interval, host, port, debug=False):
                     tx_bytes = stats.get('networks', {}).get('eth0', {}).get('tx_bytes', 0)
                     rx_bytes = stats.get('networks', {}).get('eth0', {}).get('rx_bytes', 0)
 
-                    tx = tx_bytes - prev_tx_bytes.get(name, 0)  # B
-                    rx = rx_bytes - prev_rx_bytes.get(name, 0)
+                    tx = tx_bytes - prev_tx_bytes.setdefault(name, 0)  # B
+                    rx = rx_bytes - prev_rx_bytes.setdefault(name, 0)
 
                     timer = time.time()
                     elapsed = timer - prev_timer.get(name, 0)  # s
