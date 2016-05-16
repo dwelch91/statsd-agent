@@ -3,7 +3,7 @@
 TRG_DIR = /opt/statsd-agent
 
 sudo apt-get install python-pip
-sudo pip -r requirements.txt
+sudo pip install -r requirements.txt
 
 sudo mkdir -p $TRG_DIR
 sudo cp *.py $TRG_DIR
