@@ -3,7 +3,7 @@
 set -e
 export TRG_DIR=/opt/statsd-agent
 
-sudo apt-get install python-pip
+sudo apt-get install python-pip python-dev build-essential
 sudo pip install -r requirements.txt
 
 sudo mkdir -pv $TRG_DIR
