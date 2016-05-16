@@ -1,6 +1,7 @@
 #! /bin/bash
 
-TRG_DIR = /opt/statsd-agent
+set -e
+export TRG_DIR = /opt/statsd-agent
 
 sudo apt-get install python-pip
 sudo pip install -r requirements.txt
