@@ -184,7 +184,7 @@ def run_docker(address, interval, host, port, debug=False):
     MEM_LIMIT = jmespath.compile('memory_stats.limit')
     TOTAL_USAGE = jmespath.compile('cpu_stats.cpu_usage.total_usage')
     SYSTEM_USAGE = jmespath.compile('cpu_stats.system_cpu_usage')
-    CPU_LIST = jmespath.compile('cpu_stats.cpu_usage.percpu_usage')
+    NUM_CPUS = jmespath.compile('length(cpu_stats.cpu_usage.percpu_usage)')
     TX_BYTES = jmespath.compile('networks.eth0.tx_bytes')  # TODO: Always eth0??? (likely not...)
     RX_BYTES = jmespath.compile('networks.eth0.rx_bytes')
     try:
@@ -211,16 +211,16 @@ def run_docker(address, interval, host, port, debug=False):
                     # http://stackoverflow.com/questions/30271942/get-docker-container-cpu-usage-as-percentage
                     cpu_percent = 0
 
-                    total_usage = TOTAL_USAGE.deatch(stats) or 0
+                    total_usage = TOTAL_USAGE.search(stats) or 0
                     cpu_delta = total_usage - prev_cpu.get(name, 0)
 
                     system_usage = SYSTEM_USAGE.search(stats) or 0
                     system_delta = system_usage - prev_system.get(name, 0)
 
-                    cpu_list = CPU_LIST.search(stats) or []
+                    num_cpus = NUM_CPUS.search(stats) or 1
 
                     if system_delta > 0 and cpu_delta > 0:
-                        cpu_percent = (cpu_delta / system_delta) * len(cpu_list) * 100.0
+                        cpu_percent = (cpu_delta / system_delta) * num_cpus * 100.0
 
                     if debug:
                         log.debug("{}: Cpu: {}, {}: {}%".format(name, cpu_delta, system_delta, cpu_percent))
