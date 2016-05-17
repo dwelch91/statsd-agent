@@ -6,6 +6,7 @@ import socket
 import os
 import sys
 import traceback
+import jmespath
 from common import log
 
 try:
@@ -179,7 +180,13 @@ def run_docker(address, interval, host, port, debug=False):
     prev_cpu, prev_system = {}, {}
     prev_tx_bytes, prev_rx_bytes, prev_timer = {}, {}, {}
     client = statsd.StatsClient(host, port)
-
+    MEM_USAGE = jmespath.compile('memory_stats.usage')
+    MEM_LIMIT = jmespath.compile('memory_stats.limit')
+    TOTAL_USAGE = jmespath.compile('cpu_stats.cpu_usage.total_usage')
+    SYSTEM_USAGE = jmespath.compile('cpu_stats.system_cpu_usage')
+    CPU_LIST = jmespath.compile('cpu_stats.cpu_usage.percpu_usage')
+    TX_BYTES = jmespath.compile('networks.eth0.tx_bytes')  # TODO: Always eth0??? (likely not...)
+    RX_BYTES = jmespath.compile('networks.eth0.rx_bytes')
     try:
         while True:
             with client.pipeline() as pipe:
@@ -192,8 +199,8 @@ def run_docker(address, interval, host, port, debug=False):
                     log.debug("{}: {}".format(name, status))
                     stats = get(address, '/containers/{}/stats?stream=0'.format(id_), debug)  # Very slow call...
 
-                    mem_usage = stats.get('memory_stats', {}).get('usage', 0)
-                    mem_limit = stats.get('memory_stats', {}).get('limit', 1)
+                    mem_usage = MEM_USAGE.search(stats) or 0
+                    mem_limit = MEM_LIMIT.search(stats) or 1
                     mem_percent = 100.0 * (mem_usage / mem_limit) if mem_limit > 0 else 0
 
                     if debug:
@@ -204,13 +211,13 @@ def run_docker(address, interval, host, port, debug=False):
                     # http://stackoverflow.com/questions/30271942/get-docker-container-cpu-usage-as-percentage
                     cpu_percent = 0
 
-                    total_usage = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('total_usage')
+                    total_usage = TOTAL_USAGE.deatch(stats) or 0
                     cpu_delta = total_usage - prev_cpu.get(name, 0)
 
-                    system_usage = stats.get('cpu_stats', {}).get('system_cpu_usage')
+                    system_usage = SYSTEM_USAGE.search(stats) or 0
                     system_delta = system_usage - prev_system.get(name, 0)
 
-                    cpu_list = stats.get('cpu_stats', {}).get('cpu_usage', {}).get('percpu_usage')
+                    cpu_list = CPU_LIST.search(stats) or []
 
                     if system_delta > 0 and cpu_delta > 0:
                         cpu_percent = (cpu_delta / system_delta) * len(cpu_list) * 100.0
@@ -222,8 +229,8 @@ def run_docker(address, interval, host, port, debug=False):
 
                     pipe.gauge('system.cpu.percent,service={}'.format(name), cpu_percent)
 
-                    tx_bytes = stats.get('networks', {}).get('eth0', {}).get('tx_bytes', 0)
-                    rx_bytes = stats.get('networks', {}).get('eth0', {}).get('rx_bytes', 0)
+                    tx_bytes = TX_BYTES.search(stats) or 0
+                    rx_bytes = RX_BYTES.search(stats) or 0
 
                     tx = tx_bytes - prev_tx_bytes.setdefault(name, 0)  # B
                     rx = rx_bytes - prev_rx_bytes.setdefault(name, 0)
