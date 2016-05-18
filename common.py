@@ -6,7 +6,7 @@ log = logging.getLogger('statsd-agent')
 log.setLevel(logging.DEBUG)
 
 handler = SysLogHandler(address='/dev/log')
-formatter = logging.Formatter('[%(levelname)s] %(message)s')
+formatter = logging.Formatter('[%(levelname)s] %(name)s: %(message)s')
 handler.setFormatter(formatter)
 log.addHandler(handler)
 
